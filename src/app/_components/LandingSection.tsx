@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ArrowRight, Copy, Check } from "lucide-react";
 import Footer from "./Footer";
+import { useNav } from "./nav";
 
 /**
  * Landing view for the protocol - the "what is this" page, shown when the top
@@ -196,6 +197,7 @@ function BoostCalculator() {
 }
 
 function Hero() {
+  const nav = useNav();
   return (
     <Section className="!pt-14 md:!pt-20 lg:!pt-24 !pb-20 md:!pb-28 overflow-hidden">
       <div
@@ -221,10 +223,16 @@ function Hero() {
           </p>
 
           <div className="flex flex-wrap items-center gap-3 mb-20">
-            <button className="bg-[#10B981] hover:bg-[#0EA372] text-black font-bold text-xs px-5 py-3 rounded-xl transition shadow-lg shadow-[#10B981]/10">
+            <button
+              onClick={() => nav("stakes")}
+              className="bg-[#10B981] hover:bg-[#0EA372] text-black font-bold text-xs px-5 py-3 rounded-xl transition shadow-lg shadow-[#10B981]/10"
+            >
               Stake $DIVS
             </button>
-            <button className="bg-[#1B1E24] hover:bg-[#232730] border border-[#232730] text-white font-semibold text-xs px-5 py-3 rounded-xl transition">
+            <button
+              onClick={() => nav("docs")}
+              className="bg-[#1B1E24] hover:bg-[#232730] border border-[#232730] text-white font-semibold text-xs px-5 py-3 rounded-xl transition"
+            >
               Read the docs
             </button>
           </div>
@@ -515,14 +523,21 @@ function Utility() {
 }
 
 function Cta() {
+  const nav = useNav();
   return (
     <Section className="border-t border-[#1F2228] text-center">
       <Title>Start earning from the tape.</Title>
       <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
-        <button className="bg-[#10B981] hover:bg-[#0EA372] text-black font-bold text-xs px-6 py-3 rounded-xl transition shadow-lg shadow-[#10B981]/10">
+        <button
+          onClick={() => nav("stakes")}
+          className="bg-[#10B981] hover:bg-[#0EA372] text-black font-bold text-xs px-6 py-3 rounded-xl transition shadow-lg shadow-[#10B981]/10"
+        >
           Open the app
         </button>
-        <button className="bg-[#1B1E24] hover:bg-[#232730] border border-[#232730] text-white font-semibold text-xs px-6 py-3 rounded-xl transition">
+        <button
+          onClick={() => nav("docs")}
+          className="bg-[#1B1E24] hover:bg-[#232730] border border-[#232730] text-white font-semibold text-xs px-6 py-3 rounded-xl transition"
+        >
           Read the docs
         </button>
       </div>

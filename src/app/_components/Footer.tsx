@@ -1,4 +1,7 @@
+"use client";
+
 import Image from "next/image";
+import { useNav } from "./nav";
 
 /**
  * Shared site footer.
@@ -8,6 +11,8 @@ import Image from "next/image";
  * the already-padded content area.
  */
 export default function Footer({ className = "" }: { className?: string }) {
+  const nav = useNav();
+  const targets: Record<string, string> = { Docs: "docs", App: "stakes" };
   return (
     <footer
       className={`border-t border-[#1F2228] py-8 flex flex-col md:flex-row md:items-center justify-between gap-4 ${className}`}
@@ -19,7 +24,11 @@ export default function Footer({ className = "" }: { className?: string }) {
       </div>
       <div className="flex items-center gap-5 text-[11px] text-gray-500">
         {["Docs", "App", "GitHub", "X"].map((l) => (
-          <button key={l} className="hover:text-white transition">
+          <button
+            key={l}
+            onClick={() => targets[l] && nav(targets[l])}
+            className="hover:text-white transition"
+          >
             {l}
           </button>
         ))}

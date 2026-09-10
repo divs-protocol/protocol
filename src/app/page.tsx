@@ -14,6 +14,9 @@ import LandingSection from "./_components/LandingSection";
 import MarketsSection from "./_components/MarketsSection";
 import TradeSection from "./_components/TradeSection";
 import AnalyticsSection from "./_components/AnalyticsSection";
+import StakeSection from "./_components/StakeSection";
+import ConnectPrompt from "./_components/ConnectPrompt";
+import { NavContext } from "./_components/nav";
 
 const STOCKS = [
   { 
@@ -104,15 +107,6 @@ const CHART_DATA = [
   { day: "Thu", price: 58000 },
 ];
 
-const STAKES_DATA = [
-  { pool: "WETH / DELTA", tvl: "3.2471 WETH", rate: "0.00%", fees: "0 WETH", trend: "flat" },
-  { pool: "WETH / INJOH", tvl: "1.4283 WETH", rate: "0.00%", fees: "0 WETH", trend: "flat" },
-  { pool: "WETH / NVDA", tvl: "0.6818 WETH", rate: "0.00%", fees: "0 WETH", trend: "flat" },
-  { pool: "WETH / ROBINCAT", tvl: "0.5131 WETH", rate: "935.66%", fees: "0.0071 WETH", trend: "up" },
-  { pool: "WETH / PONS", tvl: "0.0011 WETH", rate: "0.00%", fees: "0 WETH", trend: "flat" },
-  { pool: "WETH / STONKBROKER", tvl: "0.0004 WETH", rate: "0.00%", fees: "0 WETH", trend: "flat" },
-];
-
 const POSITIONS_DATA = [
   { id: "#4812", pool: "WETH / NVDA", value: "$4,250.00", share: "1.2%", reward: "0.042 WETH", status: "Active" },
   { id: "#3901", pool: "WETH / DELTA", value: "$12,800.50", share: "3.8%", reward: "0.185 WETH", status: "Active" },
@@ -164,6 +158,7 @@ export default function Home() {
   const [orderType, setOrderType] = useState("limit");
 
   return (
+    <NavContext.Provider value={setActiveSection}>
     <div className="h-screen w-screen bg-[#0B0C0E] text-[#9A9FA8] font-sans p-3 flex items-center justify-center overflow-hidden text-xs select-none">
       
       {/* INNER DASHBOARD WRAPPER CONTAINER */}
@@ -505,63 +500,12 @@ export default function Home() {
             )}
 
             {/* 2. STAKES VIEW */}
-            {activeSection === "stakes" && (
-              <div className="space-y-4">
-                <div className="bg-[#1B1E24] border border-[#232730] rounded-2xl p-5">
-                  <h1 className="text-white font-bold text-base mb-1">Stakes</h1>
-                  <p className="text-gray-400 text-xs mb-4">Put your tokens into a stake and a share of those fees is yours. Deposit coins and DIVS builds the staked pool position for you.</p>
-
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div className="bg-[#14161B] border border-[#232730] p-4 rounded-xl">
-                      <div className="text-[10px] text-gray-500 uppercase font-semibold">Total Staked</div>
-                      <div className="text-white font-mono text-xl font-bold mt-1">5.87 WETH</div>
-                    </div>
-                    <div className="bg-[#14161B] border border-[#232730] p-4 rounded-xl">
-                      <div className="text-[10px] text-gray-500 uppercase font-semibold">Stakes</div>
-                      <div className="text-white font-mono text-xl font-bold mt-1">13</div>
-                    </div>
-                  </div>
-
-                  <div className="flex space-x-2 mb-4">
-                    <button className="px-3 py-1 bg-[#10B981] text-black font-bold rounded-lg text-xs">ALL</button>
-                    <button className="px-3 py-1 bg-[#14161B] text-gray-400 hover:text-white rounded-lg text-xs border border-[#232730]">HIGHEST FEES</button>
-                    <button className="px-3 py-1 bg-[#14161B] text-gray-400 hover:text-white rounded-lg text-xs border border-[#232730]">NEWEST</button>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left font-mono">
-                      <thead>
-                        <tr className="border-b border-[#232730] text-gray-500 text-[10px] uppercase">
-                          <th className="pb-2">Pool</th>
-                          <th className="pb-2">TVL</th>
-                          <th className="pb-2">7D Rate</th>
-                          <th className="pb-2">24H Fees</th>
-                          <th className="pb-2 text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#232730]">
-                        {STAKES_DATA.map((item, idx) => (
-                          <tr key={idx} className="hover:bg-[#14161B] transition">
-                            <td className="py-3 text-white font-bold">{item.pool}</td>
-                            <td className="py-3 text-gray-300">{item.tvl}</td>
-                            <td className="py-3 text-[#10B981]">{item.rate}</td>
-                            <td className="py-3 text-gray-300">{item.fees}</td>
-                            <td className="py-3 text-right">
-                              <button className="px-3 py-1 bg-[#10B981] text-black font-bold rounded-lg text-xs hover:bg-[#0EA5E9] transition">
-                                Stake
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
+            {activeSection === "stakes" && <StakeSection />}
 
             {/* 3. POSITIONS VIEW */}
-            {activeSection === "positions" && (
+            {activeSection === "positions" && !isConnected && <ConnectPrompt what="Your positions" />}
+
+            {activeSection === "positions" && isConnected && (
               <div className="bg-[#1B1E24] border border-[#232730] rounded-2xl p-5 space-y-4">
                 <h1 className="text-white font-bold text-base mb-1">Your Positions</h1>
                 <p className="text-gray-400 text-xs mb-4">Manage active liquidity positions and claimed rewards across active pools.</p>
@@ -608,24 +552,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* OTHER SECTION PLACEHOLDERS */}
-            {activeSection === "vaults" && (
-              <div className="space-y-3">
-                <div>
-                  <h2 className="text-white font-bold text-base">Staking</h2>
-                  <p className="text-gray-500 text-[10px] mt-0.5">
-                    Stake DIVS or DIVS/WETH LP to earn a share of protocol trading fees.
-                  </p>
-                </div>
-                <div className="bg-[#1B1E24] border border-[#232730] rounded-2xl p-8 text-center">
-                  <p className="text-gray-400 text-xs">
-                    Staking is not yet live. The contract is written and tested; it goes live once
-                    DIVS is deployed and the launchpad begins routing fees.
-                  </p>
-                </div>
-              </div>
-            )}
-
             {activeSection === "protocol" && <LandingSection />}
 
             {activeSection === "markets" && <MarketsSection />}
@@ -636,7 +562,7 @@ export default function Home() {
 
             {activeSection === "docs" && <DocsSection />}
 
-            {!["protocol", "markets", "trade", "analytics", "pools", "stakes", "positions", "vaults", "docs"].includes(activeSection) && (
+            {!["protocol", "markets", "trade", "analytics", "pools", "stakes", "positions", "docs"].includes(activeSection) && (
               <div className="h-full flex flex-col items-center justify-center bg-[#1B1E24] border border-[#232730] rounded-2xl p-8 text-center min-h-[400px]">
                 <div className="w-12 h-12 bg-[#10B981]/10 border border-[#10B981]/30 text-[#10B981] rounded-2xl flex items-center justify-center mb-3">
                   {NAV_ITEMS.find((n) => n.id === activeSection)?.icon && (
@@ -659,5 +585,6 @@ export default function Home() {
       </div>
 
     </div>
+    </NavContext.Provider>
   );
 }
