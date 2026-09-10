@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Search, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
 import { MARKETS, type Market, seededRandom, usd, compact } from "@/lib/markets";
 import TokenPage from "./TokenPage";
+import Footer from "./Footer";
 
 /**
  * Markets - the index of every listed market.
@@ -270,6 +271,8 @@ export default function MarketsSection() {
         Showing {rows.length} of {MARKETS.length} markets. Fees 24h is the share of trading fees each
         market routed to stakers.
       </p>
+
+      <Footer />
     </div>
   );
 }

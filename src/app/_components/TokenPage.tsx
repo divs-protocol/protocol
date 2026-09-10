@@ -16,6 +16,7 @@ import {
   shortAddr,
   ago,
 } from "@/lib/markets";
+import Footer from "./Footer";
 
 /** One market in depth: chart, order flow, and the tape. */
 
@@ -344,6 +345,8 @@ export default function TokenPage({ market, onBack }: { market: Market; onBack: 
           </table>
         </div>
       </div>
+
+      <Footer />
     </div>
   );
 }

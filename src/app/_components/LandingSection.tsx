@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ArrowRight, Copy, Check } from "lucide-react";
+import Footer from "./Footer";
 
 /**
  * Landing view for the protocol - the "what is this" page, shown when the top
@@ -529,24 +530,6 @@ function Cta() {
   );
 }
 
-function Footer() {
-  return (
-    <footer className="border-t border-[#1F2228] px-6 md:px-10 py-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-      <div className="flex items-center gap-2.5">
-        <span className="font-bold text-white text-xs tracking-tight">DIVS</span>
-        <span className="text-[10px] text-gray-600 font-mono">Robinhood Chain · 4663</span>
-      </div>
-      <div className="flex items-center gap-5 text-[11px] text-gray-500">
-        {["Docs", "App", "GitHub", "X"].map((l) => (
-          <button key={l} className="hover:text-white transition">
-            {l}
-          </button>
-        ))}
-      </div>
-    </footer>
-  );
-}
-
 export default function LandingSection() {
   return (
     <div
@@ -564,7 +547,7 @@ export default function LandingSection() {
       <FeeFlow />
       <Utility />
       <Cta />
-      <Footer />
+      <Footer className="px-8 md:px-14 lg:px-20" />
     </div>
   );
 }
