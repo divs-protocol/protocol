@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { 
   BarChart2, Layers, Wallet, ClipboardList, Mail, User, 
-  Zap, Briefcase, ShoppingBag, Headphones, Settings, HelpCircle, 
+  Zap, Briefcase, ShoppingBag, Headphones, Settings, BookOpen, 
   Search, Bell, ArrowUpRight, ArrowDownRight, ChevronDown
 } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
@@ -207,7 +207,7 @@ export default function Home() {
                   : "hover:bg-[#1F2228] text-gray-400 hover:text-white"
               }`}
             >
-              <HelpCircle size={18} className="flex-shrink-0" />
+              <BookOpen size={18} className="flex-shrink-0" />
               <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-xs font-medium whitespace-nowrap overflow-hidden">Docs</span>
             </button>
           </div>
