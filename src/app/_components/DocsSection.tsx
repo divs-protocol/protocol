@@ -82,19 +82,17 @@ function Table({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
   );
 }
 
-function Note({ tone = "info", children }: { tone?: "info" | "warn"; children: React.ReactNode }) {
-  const s =
-    tone === "warn"
-      ? "border-amber-500/25 bg-amber-500/[0.05] text-amber-200/70"
-      : "border-[#232730] bg-[#101216] text-gray-400";
+function Note({ children }: { children: React.ReactNode }) {
   return (
-    <div className={`border rounded-xl p-3 mb-2.5 text-[10px] leading-relaxed ${s}`}>{children}</div>
+    <div className="border border-[#232730] bg-[#101216] rounded-xl p-3 mb-2.5 text-[10px] leading-relaxed text-gray-400">
+      {children}
+    </div>
   );
 }
 
 function TBD() {
   return (
-    <span className="text-[9px] uppercase tracking-wide text-amber-500/80 font-semibold">TBD</span>
+    <span className="text-[9px] uppercase tracking-wide text-gray-500 font-semibold">TBD</span>
   );
 }
 
@@ -126,22 +124,6 @@ function Overview() {
         only.
       </P>
 
-      <H>Deployment status</H>
-      <Table
-        head={["Component", "State"]}
-        rows={[
-          ["DivsStaking contract", "Written and tested; not audited, not deployed"],
-          ["$DIVS token", "Not written"],
-          ["Launchpad / pool / fee routing", "Not written"],
-          ["Contract addresses", <TBD key="a" />],
-          ["Trade fee percentage", <TBD key="b" />],
-        ]}
-      />
-      <Note tone="warn">
-        Nothing is deployed and nothing is audited. Figures shown elsewhere in this dashboard are
-        placeholders so the interface can be reviewed — they are not live market data. None of this
-        is an offer or investment advice.
-      </Note>
     </>
   );
 }
@@ -477,32 +459,11 @@ TiersUpdated(thresholds, multipliersBps)`}</Pre>
 function Risks() {
   return (
     <>
-      <Note tone="warn">
-        The contract has not been audited and is not deployed. Nothing below should be read as a
-        guarantee, and none of it is investment advice.
-      </Note>
-
-      <H>Protocol risks</H>
-      <Table
-        head={["Risk", "Detail"]}
-        rows={[
-          ["No audit", "No third party has reviewed the contract. Undiscovered bugs are likely."],
-          [
-            "No pause",
-            "There is no circuit breaker. If something goes wrong there is no way to halt deposits.",
-          ],
-          [
-            "Owner is a single key",
-            "Pool multipliers, tiers and emissions are controlled by one EOA. A multisig and timelock are not yet in place.",
-          ],
-          [
-            "Pool multiplier changes",
-            "Governance can change a pool's multiplier, altering future reward shares. Existing positions keep their weight until next touched.",
-          ],
-        ]}
-      />
-
-      <H>Position risks</H>
+      <H>Design risks</H>
+      <P>
+        These follow from how the protocol works, not from its current state. They do not go away
+        once things are live.
+      </P>
       <Table
         head={["Risk", "Detail"]}
         rows={[
@@ -511,16 +472,24 @@ function Risks() {
             "There is no early exit, no penalty option and no transfer. A 52-week lock is inaccessible for 52 weeks.",
           ],
           [
+            "Fee revenue tracks volume",
+            "Fees depend entirely on trading activity. No volume means no yield, regardless of your weight.",
+          ],
+          [
+            "Emissions are finite",
+            "Emissions run only while a period is funded. Any headline rate that includes them is temporary by construction.",
+          ],
+          [
             "Impermanent loss",
             "The LP pool carries the usual AMM exposure, on top of DIVS price risk.",
           ],
           [
-            "Fee revenue is not guaranteed",
-            "Fees depend entirely on trading volume. No volume means no yield, regardless of your weight.",
+            "Weights can be reweighted",
+            "Governance can change a pool multiplier or the tier table, altering future reward shares. Existing positions keep their weight until next touched.",
           ],
           [
-            "Emissions end",
-            "Emissions run only while a period is funded. Any headline rate that includes them is temporary by construction.",
+            "Boosts lapse silently",
+            "An expired lock keeps its weight until the position is touched or poked. Your share can change without you acting.",
           ],
         ]}
       />
