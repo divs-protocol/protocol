@@ -28,16 +28,31 @@ const fmt = (n: number, d = 0) =>
 
 /* ---------- shared bits ---------- */
 
-/** The faint square-grid motif used as a background accent. */
-function GridMotif({ className = "" }: { className?: string }) {
+/** A block of translucent squares, used as a background field like PARE's. */
+function GridMotif({
+  className = "",
+  cols = 6,
+  rows = 3,
+  size = 44,
+}: {
+  className?: string;
+  cols?: number;
+  rows?: number;
+  size?: number;
+}) {
   return (
     <div className={`pointer-events-none absolute select-none ${className}`} aria-hidden>
-      <div className="grid grid-cols-3 gap-2">
-        {Array.from({ length: 9 }, (_, i) => (
+      <div
+        className="grid gap-2.5"
+        style={{ gridTemplateColumns: `repeat(${cols}, ${size}px)` }}
+      >
+        {Array.from({ length: cols * rows }, (_, i) => (
           <div
             key={i}
-            className="w-10 h-10 rounded-[3px] bg-[#10B981]"
-            style={{ opacity: [0.05, 0.02, 0.07, 0.03, 0.09, 0.02, 0.06, 0.04, 0.02][i] }}
+            className="rounded-[4px] bg-[#10B981]"
+            // Uneven, deterministic opacities so the field reads as texture
+            // rather than a uniform block.
+            style={{ height: size, opacity: 0.02 + ((i * 37) % 9) * 0.008 }}
           />
         ))}
       </div>
@@ -52,12 +67,12 @@ function Section({
   children: React.ReactNode;
   className?: string;
 }) {
-  return <section className={`relative px-8 md:px-14 lg:px-20 py-20 md:py-28 ${className}`}>{children}</section>;
+  return <section className={`relative px-6 md:px-10 py-14 md:py-20 ${className}`}>{children}</section>;
 }
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#10B981] mb-5">
+    <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-[#10B981] mb-3">
       {children}
     </div>
   );
@@ -65,23 +80,23 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
 
 function Title({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-white font-bold tracking-tight text-3xl md:text-[2.75rem] leading-[1.12] mb-5">
+    <h2 className="text-white font-bold tracking-tight text-2xl md:text-4xl leading-[1.1] mb-3">
       {children}
     </h2>
   );
 }
 
 function Lede({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm md:text-[15px] leading-[1.8] text-gray-400 max-w-[38rem]">{children}</p>;
+  return <p className="text-[13px] md:text-sm leading-relaxed text-gray-400 max-w-2xl">{children}</p>;
 }
 
 /** label · · · · · value, the dotted-leader row PARE uses for spec data. */
 function DataRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-baseline gap-4 py-3.5 border-b border-[#1F2228] last:border-0">
-      <span className="text-[12px] text-gray-400 whitespace-nowrap">{label}</span>
+    <div className="flex items-baseline gap-3 py-2.5 border-b border-[#1F2228] last:border-0">
+      <span className="text-[11px] text-gray-400 whitespace-nowrap">{label}</span>
       <span className="flex-1 border-b border-dotted border-[#232730] translate-y-[-3px]" />
-      <span className="text-[12px] font-mono text-white whitespace-nowrap">{value}</span>
+      <span className="text-[11px] font-mono text-white whitespace-nowrap">{value}</span>
     </div>
   );
 }
@@ -99,7 +114,7 @@ function BoostCalculator() {
   const share = weight / (weight + amount);
 
   return (
-    <div className="relative bg-[#111317] border border-[#232730] rounded-2xl p-6 md:p-7 shadow-2xl">
+    <div className="relative bg-[#111317] border border-[#232730] rounded-2xl p-5 shadow-2xl">
       <div className="flex items-center justify-between mb-4">
         <span className="text-[11px] text-gray-400">You stake</span>
         <span className="flex items-center gap-1.5 text-[10px] font-mono text-gray-500">
@@ -114,7 +129,7 @@ function BoostCalculator() {
           min={1}
           value={amount}
           onChange={(e) => setAmount(Math.max(1, Number(e.target.value) || 0))}
-          className="bg-transparent text-white font-mono text-4xl w-full outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          className="bg-transparent text-white font-mono text-3xl w-full outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
         />
         <span className="flex items-center gap-2 bg-[#1B1E24] border border-[#232730] rounded-full pl-1.5 pr-3 py-1.5 flex-shrink-0">
           <span className="w-5 h-5 rounded-full bg-[#10B981]/20 border border-[#10B981]/40" />
@@ -138,30 +153,30 @@ function BoostCalculator() {
         value={weeks}
         onChange={(e) => setWeeks(Number(e.target.value))}
         aria-label="Lock duration in weeks"
-        className="w-full mb-6 accent-[#10B981] cursor-pointer"
+        className="w-full mb-5 accent-[#10B981] cursor-pointer"
       />
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between bg-[#14161B] border border-[#232730] rounded-xl px-4 py-3.5">
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between bg-[#14161B] border border-[#232730] rounded-xl px-3.5 py-3">
           <div>
             <div className="text-[11px] text-white font-medium">Lock multiplier</div>
             <div className="text-[10px] text-gray-500 mt-0.5">
               1x flexible, 4x at {MAX_LOCK_WEEKS} weeks
             </div>
           </div>
-          <div className="font-mono text-2xl text-[#10B981]">{mult.toFixed(4)}x</div>
+          <div className="font-mono text-xl text-[#10B981]">{mult.toFixed(4)}x</div>
         </div>
 
-        <div className="flex items-center justify-between bg-[#14161B] border border-[#232730] rounded-xl px-4 py-3.5">
+        <div className="flex items-center justify-between bg-[#14161B] border border-[#232730] rounded-xl px-3.5 py-3">
           <div>
             <div className="text-[11px] text-white font-medium">Your weight</div>
             <div className="text-[10px] text-gray-500 mt-0.5">What fees are split by</div>
           </div>
-          <div className="font-mono text-2xl text-white">{fmt(weight)}</div>
+          <div className="font-mono text-xl text-white">{fmt(weight)}</div>
         </div>
       </div>
 
-      <div className="mt-6 pt-5 border-t border-[#1F2228]">
+      <div className="mt-4 pt-4 border-t border-[#1F2228]">
         <div className="flex items-baseline justify-between mb-2">
           <span className="text-[10px] text-gray-500">
             Against an equal stake left flexible, you take
@@ -181,42 +196,50 @@ function BoostCalculator() {
 
 function Hero() {
   return (
-    <Section className="pt-10 md:pt-14 overflow-hidden">
-      <GridMotif className="top-0 right-0 opacity-70 hidden lg:block" />
-      <div className="relative grid lg:grid-cols-[1.05fr_0.95fr] gap-12 lg:gap-16 items-center">
+    <Section className="!py-24 md:!py-36 lg:!py-44 overflow-hidden">
+      <div
+        className="pointer-events-none absolute inset-0"
+        aria-hidden
+        style={{
+          background:
+            "radial-gradient(58% 50% at 76% 6%, rgba(16,185,129,0.10), transparent 70%)",
+        }}
+      />
+      <GridMotif className="-top-6 right-0 hidden lg:block" cols={7} rows={3} size={48} />
+      <div className="relative grid lg:grid-cols-[1.05fr_0.95fr] gap-14 lg:gap-20 items-center">
         <div>
           <Eyebrow>Robinhood Chain · 4663</Eyebrow>
-          <h1 className="text-white font-bold tracking-tight text-4xl md:text-[3.4rem] leading-[1.08] mb-7">
+          <h1 className="text-white font-bold tracking-tight text-3xl md:text-5xl leading-[1.05] mb-8">
             The exchange pays its
             <br />
             users, not its shareholders.
           </h1>
-          <p className="text-[15px] md:text-base leading-[1.8] text-gray-400 max-w-[34rem] mb-10">
+          <p className="text-[13px] md:text-sm leading-relaxed text-gray-400 max-w-xl mb-12">
             Trade tokenized stocks around the clock, on-chain. Every trade pays a fee - and instead
             of that fee becoming a brokerage&apos;s profit, it is routed back to the people who stake
             $DIVS. Lock longer, take a bigger share.
           </p>
 
-          <div className="flex flex-wrap items-center gap-3 mb-14">
-            <button className="bg-[#10B981] hover:bg-[#0EA372] text-black font-bold text-[13px] px-6 py-3.5 rounded-xl transition shadow-lg shadow-[#10B981]/10">
+          <div className="flex flex-wrap items-center gap-3 mb-20">
+            <button className="bg-[#10B981] hover:bg-[#0EA372] text-black font-bold text-xs px-5 py-3 rounded-xl transition shadow-lg shadow-[#10B981]/10">
               Stake $DIVS
             </button>
-            <button className="bg-[#1B1E24] hover:bg-[#232730] border border-[#232730] text-white font-semibold text-[13px] px-6 py-3.5 rounded-xl transition">
+            <button className="bg-[#1B1E24] hover:bg-[#232730] border border-[#232730] text-white font-semibold text-xs px-5 py-3 rounded-xl transition">
               Read the docs
             </button>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               ["4x", "Maximum boost"],
               ["52", "Weeks max lock"],
               ["2", "Staking pools"],
               ["WETH", "Fees paid in"],
             ].map(([v, l]) => (
-              <div key={l} className="bg-[#14161B] border border-[#232730] rounded-2xl p-6 md:p-7">
-                <div className="font-mono text-3xl md:text-[2rem] text-white mb-1.5">{v}</div>
-                <div className="text-[11px] text-gray-500 leading-snug">{l}</div>
-                <div className="mt-4 h-0.5 w-8 bg-[#10B981] rounded-full" />
+              <div key={l} className="bg-[#14161B] border border-[#232730] rounded-xl p-3.5">
+                <div className="font-mono text-xl md:text-2xl text-white mb-1">{v}</div>
+                <div className="text-[10px] text-gray-500 leading-tight">{l}</div>
+                <div className="mt-2.5 h-0.5 w-7 bg-[#10B981] rounded-full" />
               </div>
             ))}
           </div>
@@ -239,15 +262,15 @@ function TwoRoles() {
         what gets traded; $DIVS is what earns from that trading.
       </Lede>
 
-      <div className="grid md:grid-cols-2 gap-5 mt-10">
-        <div className="bg-[#14161B] border border-[#232730] rounded-2xl p-6 md:p-7">
+      <div className="grid md:grid-cols-2 gap-4 mt-8">
+        <div className="bg-[#14161B] border border-[#232730] rounded-2xl p-5">
           <div className="text-[10px] font-mono uppercase tracking-wider text-gray-500 mb-3">
             Traded · NVDA, AAPL, TSLA…
           </div>
-          <h3 className="text-white font-bold text-xl mb-3 tracking-tight">
+          <h3 className="text-white font-bold text-lg mb-2 tracking-tight">
             Buy the stock. Any hour.
           </h3>
-          <p className="text-[13px] leading-[1.75] text-gray-400 mb-6">
+          <p className="text-[11px] leading-relaxed text-gray-400 mb-4">
             Tokenized equity exposure that settles on-chain in seconds, wallet to wallet. No market
             hours, no clearinghouse, no broker between you and the position.
           </p>
@@ -256,14 +279,14 @@ function TwoRoles() {
           <DataRow label="Earns protocol fees" value="no" />
         </div>
 
-        <div className="bg-[#14161B] border border-[#232730] rounded-2xl p-6 md:p-7">
+        <div className="bg-[#14161B] border border-[#232730] rounded-2xl p-5">
           <div className="text-[10px] font-mono uppercase tracking-wider text-[#10B981] mb-3">
             Staked · $DIVS
           </div>
-          <h3 className="text-white font-bold text-xl mb-3 tracking-tight">
+          <h3 className="text-white font-bold text-lg mb-2 tracking-tight">
             Own the fees. Nothing else.
           </h3>
-          <p className="text-[13px] leading-[1.75] text-gray-400 mb-6">
+          <p className="text-[11px] leading-relaxed text-gray-400 mb-4">
             Stake $DIVS single-sided, or DIVS/WETH LP for a higher weight. You collect a share of
             every fee the platform charges, for as long as you are staked.
           </p>
@@ -273,7 +296,7 @@ function TwoRoles() {
         </div>
       </div>
 
-      <p className="text-[13px] text-gray-500 mt-6">
+      <p className="text-[11px] text-gray-500 mt-4">
         Holding $DIVS in your wallet earns nothing - only staked positions carry weight.
       </p>
     </Section>
@@ -301,14 +324,14 @@ function HowItWorks() {
       <Title>How it works</Title>
       <Lede>Three steps. The fee never leaves the chain.</Lede>
 
-      <div className="grid md:grid-cols-3 gap-10 mt-12">
+      <div className="grid md:grid-cols-3 gap-8 mt-9">
         {steps.map(([title, body], i) => (
-          <div key={title} className="border-t border-[#232730] pt-6">
-            <div className="font-mono text-3xl text-[#10B981] mb-4">
+          <div key={title} className="border-t border-[#232730] pt-5">
+            <div className="font-mono text-2xl text-[#10B981] mb-3">
               {String(i + 1).padStart(2, "0")}
             </div>
-            <h3 className="text-white font-bold text-lg mb-3 tracking-tight">{title}</h3>
-            <p className="text-[13px] leading-[1.75] text-gray-400">{body}</p>
+            <h3 className="text-white font-bold text-base mb-2 tracking-tight">{title}</h3>
+            <p className="text-[11px] leading-relaxed text-gray-400">{body}</p>
           </div>
         ))}
       </div>
@@ -329,7 +352,7 @@ function Weighting() {
   return (
     <Section className="border-t border-[#1F2228] overflow-hidden">
       <GridMotif className="bottom-0 left-0 opacity-60 hidden lg:block" />
-      <div className="relative grid lg:grid-cols-2 gap-12 lg:gap-16 items-start">
+      <div className="relative grid lg:grid-cols-2 gap-10 items-start">
         <div>
           <Title>Commitment is the multiplier.</Title>
           <Lede>
@@ -347,14 +370,14 @@ function Weighting() {
             </code>
           </div>
 
-          <p className="text-[13px] leading-[1.75] text-gray-400">
+          <p className="text-[11px] leading-relaxed text-gray-400">
             The lock component scales linearly to a hard ceiling of 4x at one year. It is not a
             promise of yield - it is a claim on whatever the platform actually earns, sized by how
             long you are willing to leave your stake in place.
           </p>
         </div>
 
-        <div className="bg-[#14161B] border border-[#232730] rounded-2xl p-6 md:p-7">
+        <div className="bg-[#14161B] border border-[#232730] rounded-2xl p-5">
           <div className="text-[10px] font-mono uppercase tracking-wider text-gray-500 mb-3">
             Lock curve
           </div>
@@ -397,13 +420,13 @@ function FeeFlow() {
         the people staking behind it.
       </Lede>
 
-      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-10">
+      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 mt-8">
         {cards.map(([tag, title, body], i) => (
           <div key={tag} className="relative">
-            <div className="bg-[#14161B] border border-[#232730] rounded-2xl p-5 h-full">
-              <div className="font-mono text-base text-[#10B981] mb-4">{tag}</div>
-              <h3 className="text-white font-semibold text-[13px] mb-2">{title}</h3>
-              <p className="text-[12px] leading-[1.7] text-gray-500">{body}</p>
+            <div className="bg-[#14161B] border border-[#232730] rounded-2xl p-4 h-full">
+              <div className="font-mono text-sm text-[#10B981] mb-3">{tag}</div>
+              <h3 className="text-white font-semibold text-[12px] mb-1.5">{title}</h3>
+              <p className="text-[10px] leading-relaxed text-gray-500">{body}</p>
               {i === cards.length - 1 && (
                 <p className="text-[10px] text-gray-600 mt-3 font-mono">↻ and around again</p>
               )}
@@ -461,7 +484,7 @@ function Utility() {
           </button>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-5">
+        <div className="grid md:grid-cols-3 gap-3">
           {[
             [
               "EARN",
@@ -479,10 +502,10 @@ function Utility() {
               "Stake DIVS/WETH LP instead for a higher pool multiplier, on top of whatever the pair earns.",
             ],
           ].map(([tag, title, body]) => (
-            <div key={tag} className="bg-[#14161B] border border-[#232730] rounded-2xl p-6 md:p-7">
+            <div key={tag} className="bg-[#14161B] border border-[#232730] rounded-2xl p-5">
               <div className="text-[10px] font-mono tracking-wider text-[#10B981] mb-3">{tag}</div>
-              <h3 className="text-white font-bold text-lg mb-3 tracking-tight">{title}</h3>
-              <p className="text-[13px] leading-[1.75] text-gray-400">{body}</p>
+              <h3 className="text-white font-bold text-base mb-2 tracking-tight">{title}</h3>
+              <p className="text-[11px] leading-relaxed text-gray-400">{body}</p>
             </div>
           ))}
         </div>
@@ -496,10 +519,10 @@ function Cta() {
     <Section className="border-t border-[#1F2228] text-center">
       <Title>Start earning from the tape.</Title>
       <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
-        <button className="bg-[#10B981] hover:bg-[#0EA372] text-black font-bold text-[13px] px-7 py-4 rounded-xl transition shadow-lg shadow-[#10B981]/10">
+        <button className="bg-[#10B981] hover:bg-[#0EA372] text-black font-bold text-xs px-6 py-3 rounded-xl transition shadow-lg shadow-[#10B981]/10">
           Open the app
         </button>
-        <button className="bg-[#1B1E24] hover:bg-[#232730] border border-[#232730] text-white font-semibold text-[13px] px-7 py-4 rounded-xl transition">
+        <button className="bg-[#1B1E24] hover:bg-[#232730] border border-[#232730] text-white font-semibold text-xs px-6 py-3 rounded-xl transition">
           Read the docs
         </button>
       </div>
@@ -509,7 +532,7 @@ function Cta() {
 
 function Footer() {
   return (
-    <footer className="border-t border-[#1F2228] px-8 md:px-14 lg:px-20 py-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <footer className="border-t border-[#1F2228] px-6 md:px-10 py-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div className="flex items-center gap-2.5">
         <span className="font-bold text-white text-xs tracking-tight">DIVS</span>
         <span className="text-[10px] text-gray-600 font-mono">Robinhood Chain · 4663</span>
@@ -527,7 +550,14 @@ function Footer() {
 
 export default function LandingSection() {
   return (
-    <div className="-m-4 bg-[#0B0C0E] rounded-2xl overflow-hidden border border-[#1F2228]">
+    <div
+      className="-m-4 bg-[#0B0C0E] rounded-2xl overflow-hidden border border-[#1F2228]"
+      style={{
+        backgroundImage:
+          "radial-gradient(circle, rgba(255,255,255,0.085) 1px, transparent 1px)",
+        backgroundSize: "32px 32px",
+      }}
+    >
       <Hero />
       <TwoRoles />
       <HowItWorks />
