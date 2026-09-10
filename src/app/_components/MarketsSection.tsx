@@ -2,47 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { Search, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
+import { MARKETS, type Market, seededRandom, usd, compact } from "@/lib/markets";
+import TokenPage from "./TokenPage";
 
 /**
  * Markets - the index of every listed market.
  *
- * This is the browse layer: scan, sort, filter, then jump into the terminal for
- * one instrument. Depth of book and order entry stay in the trading view.
- *
- * Prices, volume and liquidity are placeholders until a feed exists. They are
- * kept in one MARKETS array with a single shaped type so swapping in live data
- * is a change to the data source, not to the table.
+ * The browse layer: scan, sort, filter, then open one market to see its chart
+ * and tape. Depth of book and order entry stay in the trading terminal.
  */
-
-type Listing = "pool" | "curve";
-type Kind = "stock" | "etf";
-
-type Market = {
-  ticker: string;
-  name: string;
-  kind: Kind;
-  price: number;
-  change24h: number;
-  volume24h: number;
-  liquidity: number;
-  fees24h: number;
-  listing: Listing;
-};
-
-const MARKETS: Market[] = [
-  { ticker: "NVDA", name: "NVIDIA Corp.", kind: "stock", price: 124.5, change24h: 4.25, volume24h: 64654880, liquidity: 12840000, fees24h: 19396, listing: "pool" },
-  { ticker: "AAPL", name: "Apple Inc.", kind: "stock", price: 221.1, change24h: -1.8, volume24h: 48210400, liquidity: 10420000, fees24h: 14463, listing: "pool" },
-  { ticker: "TSLA", name: "Tesla Inc.", kind: "stock", price: 214.3, change24h: 6.1, volume24h: 39877120, liquidity: 8110000, fees24h: 11963, listing: "pool" },
-  { ticker: "SPY", name: "SPDR S&P 500 ETF", kind: "etf", price: 757.55, change24h: 0.42, volume24h: 31204900, liquidity: 15960000, fees24h: 9361, listing: "pool" },
-  { ticker: "AMZN", name: "Amazon.com Inc.", kind: "stock", price: 186.4, change24h: 2.15, volume24h: 27655300, liquidity: 7240000, fees24h: 8296, listing: "pool" },
-  { ticker: "MSFT", name: "Microsoft Corp.", kind: "stock", price: 448.2, change24h: 0.85, volume24h: 24118700, liquidity: 9870000, fees24h: 7235, listing: "pool" },
-  { ticker: "QQQ", name: "Invesco QQQ Trust", kind: "etf", price: 486.12, change24h: 1.04, volume24h: 18902450, liquidity: 6650000, fees24h: 5670, listing: "pool" },
-  { ticker: "GOOGL", name: "Alphabet Inc.", kind: "stock", price: 178.35, change24h: -0.45, volume24h: 16440210, liquidity: 5980000, fees24h: 4932, listing: "pool" },
-  { ticker: "META", name: "Meta Platforms", kind: "stock", price: 612.8, change24h: 3.37, volume24h: 14203880, liquidity: 5120000, fees24h: 4261, listing: "pool" },
-  { ticker: "AMD", name: "Advanced Micro Devices", kind: "stock", price: 167.9, change24h: -2.64, volume24h: 9884300, liquidity: 3410000, fees24h: 2965, listing: "pool" },
-  { ticker: "PFE", name: "Pfizer Inc.", kind: "stock", price: 28.44, change24h: -0.92, volume24h: 3120480, liquidity: 1180000, fees24h: 936, listing: "curve" },
-  { ticker: "KO", name: "Coca-Cola Co.", kind: "stock", price: 71.06, change24h: 0.18, volume24h: 1894220, liquidity: 742000, fees24h: 568, listing: "curve" },
-];
 
 type SortKey = "price" | "change24h" | "volume24h" | "liquidity" | "fees24h";
 type Filter = "all" | "stock" | "etf" | "new" | "gainers" | "losers";
@@ -56,23 +24,9 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: "losers", label: "Losers" },
 ];
 
-const usd = (n: number, d = 2) =>
-  `$${n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })}`;
-
-const compact = (n: number) => {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  return `$${n.toFixed(0)}`;
-};
-
-/** Deterministic per-ticker series, so server and client render the same path. */
+/** Deterministic per-ticker sparkline, matching the token page's series. */
 function sparkPath(ticker: string, up: boolean, w = 62, h = 20) {
-  let seed = 0;
-  for (let i = 0; i < ticker.length; i++) seed = (seed * 31 + ticker.charCodeAt(i)) >>> 0;
-  const rand = () => {
-    seed = (seed * 1664525 + 1013904223) >>> 0;
-    return seed / 0xffffffff;
-  };
+  const rand = seededRandom(ticker);
   const n = 16;
   const vals: number[] = [];
   let v = 0.5;
@@ -106,21 +60,19 @@ function SortHeader({
   active,
   dir,
   onClick,
-  align = "right",
 }: {
   label: string;
   active: boolean;
   dir: "asc" | "desc";
   onClick: () => void;
-  align?: "left" | "right";
 }) {
   return (
-    <th className={`px-3 py-2.5 font-semibold ${align === "right" ? "text-right" : "text-left"}`}>
+    <th className="px-3 py-2.5 font-semibold text-right">
       <button
         onClick={onClick}
-        className={`inline-flex items-center gap-1 transition hover:text-white ${
+        className={`inline-flex flex-row-reverse items-center gap-1 transition hover:text-white ${
           active ? "text-white" : "text-gray-500"
-        } ${align === "right" ? "flex-row-reverse" : ""}`}
+        }`}
       >
         {label}
         {active ? (
@@ -134,6 +86,7 @@ function SortHeader({
 }
 
 export default function MarketsSection() {
+  const [selected, setSelected] = useState<Market | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("volume24h");
@@ -171,12 +124,14 @@ export default function MarketsSection() {
     [],
   );
 
+  if (selected) return <TokenPage market={selected} onBack={() => setSelected(null)} />;
+
   return (
     <div className="space-y-4">
       <div>
         <h2 className="text-white font-bold tracking-tight text-xl mb-1">Markets</h2>
         <p className="text-[11px] text-gray-500">
-          Every listed market, and what each one pays stakers.
+          Every listed market, and what each one pays stakers. Select one to open it.
         </p>
       </div>
 
@@ -236,7 +191,11 @@ export default function MarketsSection() {
               {rows.map((m, i) => {
                 const up = m.change24h >= 0;
                 return (
-                  <tr key={m.ticker} className="border-b border-[#1F2228] last:border-0 hover:bg-[#14161B] transition">
+                  <tr
+                    key={m.ticker}
+                    onClick={() => setSelected(m)}
+                    className="border-b border-[#1F2228] last:border-0 hover:bg-[#14161B] transition cursor-pointer"
+                  >
                     <td className="px-3 py-3 text-gray-600 font-mono">{i + 1}</td>
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-2.5">
@@ -281,7 +240,13 @@ export default function MarketsSection() {
                       </span>
                     </td>
                     <td className="px-3 py-3 text-right">
-                      <button className="bg-[#232730] hover:bg-[#10B981] hover:text-black text-white text-[10px] font-semibold px-3 py-1.5 rounded-lg transition">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelected(m);
+                        }}
+                        className="bg-[#232730] hover:bg-[#10B981] hover:text-black text-white text-[10px] font-semibold px-3 py-1.5 rounded-lg transition"
+                      >
                         Trade
                       </button>
                     </td>
