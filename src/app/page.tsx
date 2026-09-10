@@ -11,6 +11,7 @@ import {
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
 import DocsSection from "./_components/DocsSection";
 import LandingSection from "./_components/LandingSection";
+import MarketsSection from "./_components/MarketsSection";
 
 const STOCKS = [
   { 
@@ -243,7 +244,14 @@ export default function Home() {
               >
                 Protocol
               </button>
-              <button className="text-gray-400 hover:text-white transition">Markets</button>
+              <button
+                onClick={() => setActiveSection("markets")}
+                className={`transition ${
+                  activeSection === "markets" ? "text-[#10B981]" : "text-gray-400 hover:text-white"
+                }`}
+              >
+                Markets
+              </button>
               <button className="text-gray-400 hover:text-white transition">Trade</button>
               <button className="text-gray-400 hover:text-white transition">Analytics</button>
             </div>
@@ -604,9 +612,11 @@ export default function Home() {
 
             {activeSection === "protocol" && <LandingSection />}
 
+            {activeSection === "markets" && <MarketsSection />}
+
             {activeSection === "docs" && <DocsSection />}
 
-            {!["protocol", "pools", "stakes", "positions", "vaults", "docs"].includes(activeSection) && (
+            {!["protocol", "markets", "pools", "stakes", "positions", "vaults", "docs"].includes(activeSection) && (
               <div className="h-full flex flex-col items-center justify-center bg-[#1B1E24] border border-[#232730] rounded-2xl p-8 text-center min-h-[400px]">
                 <div className="w-12 h-12 bg-[#10B981]/10 border border-[#10B981]/30 text-[#10B981] rounded-2xl flex items-center justify-center mb-3">
                   {NAV_ITEMS.find((n) => n.id === activeSection)?.icon && (
