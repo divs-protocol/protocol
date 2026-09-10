@@ -220,9 +220,9 @@ export default function Home() {
           {/* TOP HEADER */}
           <header className="h-14 border-b border-[#1F2228] px-5 flex items-center justify-between bg-[#14161B] flex-shrink-0">
             {/* Branding Logo */}
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2.5">
+              {/* Logo mark slots in here */}
               <span className="text-base font-extrabold tracking-tight text-white">DIVS</span>
-              <span className="text-base font-extrabold text-[#10B981]">{"// PROTOCOL"}</span>
             </div>
 
             {/* Header Navigation / Category Headings */}
