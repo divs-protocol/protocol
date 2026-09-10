@@ -16,7 +16,7 @@ import TradeSection from "./_components/TradeSection";
 import AnalyticsSection from "./_components/AnalyticsSection";
 import StakeSection from "./_components/StakeSection";
 import ConnectPrompt from "./_components/ConnectPrompt";
-import StakeBanner from "./_components/StakeBanner";
+import Footer from "./_components/Footer";
 import { NavContext } from "./_components/nav";
 
 const STOCKS = [
@@ -319,7 +319,6 @@ export default function Home() {
             {/* 1. POOLS VIEW */}
             {activeSection === "pools" && (
               <>
-                <StakeBanner onStake={() => setActiveSection("stakes")} />
 
                 <div className="flex space-x-2.5 overflow-x-auto pb-1 scrollbar-none">
                   {STOCKS.map((stock) => (
@@ -510,6 +509,8 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
+
+                <Footer />
               </>
             )}
 
