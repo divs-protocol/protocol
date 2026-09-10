@@ -228,12 +228,12 @@ export default function Home() {
             {/* Header Navigation / Category Headings */}
             <div className="hidden md:flex items-center space-x-6 text-xs font-semibold">
               <button
-                onClick={() => setActiveSection("home")}
+                onClick={() => setActiveSection("protocol")}
                 className={`transition ${
-                  activeSection === "home" ? "text-[#10B981]" : "text-white hover:text-[#10B981]"
+                  activeSection === "protocol" ? "text-[#10B981]" : "text-white hover:text-[#10B981]"
                 }`}
               >
-                Home
+                Protocol
               </button>
               <button className="text-gray-400 hover:text-white transition">Markets</button>
               <button className="text-gray-400 hover:text-white transition">Trade</button>
@@ -594,11 +594,11 @@ export default function Home() {
               </div>
             )}
 
-            {activeSection === "home" && <LandingSection />}
+            {activeSection === "protocol" && <LandingSection />}
 
             {activeSection === "docs" && <DocsSection />}
 
-            {!["home", "pools", "stakes", "positions", "vaults", "docs"].includes(activeSection) && (
+            {!["protocol", "pools", "stakes", "positions", "vaults", "docs"].includes(activeSection) && (
               <div className="h-full flex flex-col items-center justify-center bg-[#1B1E24] border border-[#232730] rounded-2xl p-8 text-center min-h-[400px]">
                 <div className="w-12 h-12 bg-[#10B981]/10 border border-[#10B981]/30 text-[#10B981] rounded-2xl flex items-center justify-center mb-3">
                   {NAV_ITEMS.find((n) => n.id === activeSection)?.icon && (
