@@ -195,3 +195,106 @@ export function flowSummary(txns: Txn[]) {
     buyShare: buyVol + sellVol === 0 ? 0.5 : buyVol / (buyVol + sellVol),
   };
 }
+
+/* ---------- generated order book ---------- */
+
+export type BookLevel = { price: number; size: number; value: number; cum: number };
+export type Book = {
+  bids: BookLevel[];
+  asks: BookLevel[];
+  mid: number;
+  spread: number;
+  spreadPct: number;
+  decimals: number;
+};
+
+/** Tick size that keeps quotes sensible across very different price scales. */
+function tickFor(price: number) {
+  if (price >= 500) return 0.05;
+  if (price >= 100) return 0.02;
+  if (price >= 10) return 0.01;
+  return 0.001;
+}
+
+export function orderBook(m: Market, levels = 11): Book {
+  const rand = seededRandom(`${m.ticker}:book`);
+  const tick = tickFor(m.price);
+  // Work in whole ticks. Deriving prices in floats lets two levels round to the
+  // same displayed string, which renders as duplicate rows in the book.
+  const perUnit = Math.round(1 / tick);
+  // Decimals needed to print the tick itself. Deriving this from perUnit only
+  // works for powers of ten - a 0.02 tick gives perUnit 50 and would print one
+  // decimal, collapsing 124.50 and 124.52 into the same row.
+  const decimals = (String(tick).split(".")[1] ?? "").length;
+
+  const spreadTicks = 1 + Math.floor(rand() * 3);
+  const midTicks = Math.round(m.price * perUnit);
+  const bestAskTicks = midTicks + Math.ceil(spreadTicks / 2);
+  const bestBidTicks = bestAskTicks - spreadTicks;
+
+  const side = (bestTicks: number, dir: -1 | 1): BookLevel[] => {
+    let cum = 0;
+    let t = bestTicks;
+    return Array.from({ length: levels }, (_, i) => {
+      if (i > 0) t += dir * (1 + Math.floor(rand() * 2));
+      const price = t / perUnit;
+      // Depth thickens away from the touch, as a real book does.
+      const size = Math.round((rand() * 380 + 25) * (1 + i * 0.22) * 100) / 100;
+      cum += size;
+      return { price, size, value: price * size, cum };
+    });
+  };
+
+  const spread = (bestAskTicks - bestBidTicks) / perUnit;
+  return {
+    bids: side(bestBidTicks, -1),
+    asks: side(bestAskTicks, 1),
+    mid: m.price,
+    spread,
+    spreadPct: (spread / m.price) * 100,
+    decimals,
+  };
+}
+
+/* ---------- generated open orders ---------- */
+
+export type OrderStatus = "open" | "partial" | "filled" | "cancelled";
+export type OrderType = "limit" | "market" | "stop";
+
+export type Order = {
+  id: string;
+  ticker: string;
+  side: "buy" | "sell";
+  type: OrderType;
+  price: number;
+  amount: number;
+  filled: number;
+  status: OrderStatus;
+  secondsAgo: number;
+};
+
+export function openOrders(m: Market, count = 5): Order[] {
+  const rand = seededRandom(`${m.ticker}:orders`);
+  const types: OrderType[] = ["limit", "limit", "stop", "market"];
+  let t = 40;
+
+  return Array.from({ length: count }, (_, i) => {
+    const side = rand() < 0.5 ? "buy" : "sell";
+    const amount = Math.round((rand() * 260 + 8) * 100) / 100;
+    const fillRatio = rand();
+    const filled = fillRatio > 0.72 ? amount : Math.round(amount * fillRatio * 100) / 100;
+    t += Math.floor(rand() * 900) + 120;
+
+    return {
+      id: `${m.ticker}-o${i}`,
+      ticker: m.ticker,
+      side,
+      type: types[Math.floor(rand() * types.length)],
+      price: m.price * (1 + (side === "buy" ? -1 : 1) * rand() * 0.03),
+      amount,
+      filled,
+      status: filled === 0 ? "open" : filled >= amount ? "filled" : "partial",
+      secondsAgo: t,
+    };
+  });
+}
