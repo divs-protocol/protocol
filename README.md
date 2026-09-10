@@ -1,49 +1,63 @@
 # DIVS Protocol
 
-Yield stripping for tokenized stocks. Depositors hand the vault a rebasing
-ERC-8056 stock token; the vault separates the dividend growth — the rise in the
-token's `uiMultiplier` — from the principal and pays it out as harvestable
-yield, minus a protocol fee.
+A community-owned exchange for tokenized stocks. Traders buy and sell stock
+tokens 24/7 on the launchpad; the trading fees that a brokerage would keep are
+routed back to DIVS stakers instead.
+
+$DIVS is the cash-flow token. Users stake **DIVS** (single-sided) or **DIVS/WETH
+LP**, and earn a weighted share of collected fees plus DIVS emissions. Stock
+tokens are the asset traded on the platform — they are never staked.
 
 ## Layout
 
-| Path         | What it is                                                        |
-| ------------ | ----------------------------------------------------------------- |
-| `src/`       | Next.js 16 dashboard (App Router, Tailwind 4, wagmi + viem)        |
-| `contracts/` | Hardhat 3 project: `DivsVault.sol` and its Solidity test suite     |
+| Path         | What it is                                                      |
+| ------------ | --------------------------------------------------------------- |
+| `src/`       | Next.js 16 dashboard (App Router, Tailwind 4, wagmi + viem)      |
+| `contracts/` | Hardhat 3 project: `DivsStaking.sol` and its Solidity test suite |
 
 The two halves are **separate npm projects on purpose**. The root uses pnpm; the
 Hardhat project keeps its own `package-lock.json` and `node_modules` and is
 installed with npm. Install and run them independently.
 
-## Vault accounting
+## Staking accounting
 
-A position is stored as `{ rawAmount, entryMultiplier }`, and the depositor's
-claim on the vault is always:
+Fees arrive as WETH and are distributed through a single accumulator. A staker's
+claim is:
 
 ```
-claim = rawAmount * currentMultiplier / entryMultiplier
+claim = weight * accWethPerWeight - debt
+weight = amount * poolMultiplier * tierMultiplier * lockMultiplier
 ```
 
-`rawAmount` is denominated in token units *as of `entryMultiplier`*, never in raw
-display units, so every conversion in and out scales through that ratio. Three
-consequences worth knowing before changing anything in `DivsVault.sol`:
+Both pools share one global weight space, so `poolMultiplier` is the governance
+-set exchange rate between a staked DIVS and a staked LP token. `lockMultiplier`
+runs 1x flexible to 4x at a 52-week lock; `tierMultiplier` is threshold-based on
+position size.
 
-- **Yield is proportional, not absolute.** `pendingYield` divides by
-  `entryMultiplier`, not by a fixed `1e18`. Dividing by a constant overpays
-  anyone who entered above 1e18 and does so out of other depositors' principal.
-- **Deposits credit the balance delta**, not the requested amount. Rebasing
-  tokens floor the share conversion and fee-on-transfer tokens skim; crediting
-  the request leaves the vault permanently short, and the gap compounds with
-  every later rebase.
-- **A downward rebase falls on the depositor holding it.** `withdraw` scales the
-  principal to the live multiplier, so a fall in the underlying is not
-  socialised onto everyone else.
+Two rules carry solvency, and both are enforced structurally rather than assumed:
 
-The vault pays yield out of its own token balance, which is solvent **only
-because the token genuinely rebases `balanceOf`**. If `uiMultiplier` were a
-display-only figure, every harvest would be funded from the next deposit. See
-`test_PendingYieldEqualsActualVaultBalanceGrowth`.
+- **Fees are pulled in before they are distributed.** `notifyFee` transfers the
+  WETH first and only then raises the accumulator, so the contract cannot promise
+  revenue it does not hold. It is permissionless — an unauthorised caller can
+  only donate.
+- **Emissions pay strictly from `emissionReserve`.** DIVS is both a staked and an
+  emitted asset, so without an explicit funded reserve an emission would be paid
+  out of another staker's principal. `totalStakedDivs` is tracked separately and
+  never drawn on.
+
+Any weight change must settle outstanding rewards into `pending` before it takes
+effect, so every mutating path routes through `_settle`.
+
+`poke` is permissionless: a staker has no incentive to demote their own expired
+lock, and an expired boost would otherwise keep diluting everyone still locked.
+
+### Known decision, not yet made
+
+Emissions accrue whether or not the reserve is funded. Setting a rate against an
+empty reserve builds claims nobody can pay, and whoever claims first after a
+later top-up drains it. Payouts are capped at the reserve and the remainder stays
+pending, which is safe but accumulates an unfunded IOU. The alternative is to
+halt accrual when the reserve empties.
 
 ## Contracts
 
@@ -55,18 +69,9 @@ cd contracts && npm install
 cd contracts && npx hardhat test
 ```
 
-Solidity unit tests live in `contracts/DivsVault.t.sol` and run on forge-std.
-`MockStockToken` is a share-based rebasing ERC-8056 token used to drive them.
-
-Deploy:
-
-```bash
-cd contracts && npx hardhat ignition deploy ignition/modules/DivsVault.ts --network sepolia
-```
-
-`feeCollector` defaults to the deploying account; override it with a parameters
-file (see the header of `ignition/modules/DivsVault.ts`). Sepolia needs
-`SEPOLIA_RPC_URL` and `SEPOLIA_PRIVATE_KEY` set via `npx hardhat keystore set`.
+Solidity tests live in `contracts/DivsStaking.t.sol` and run on forge-std,
+including fuzz invariants asserting that WETH paid never exceeds WETH notified
+and that principal is always recoverable.
 
 ## Web app
 
@@ -74,19 +79,7 @@ file (see the header of `ignition/modules/DivsVault.ts`). Sepolia needs
 pnpm install && pnpm dev
 ```
 
-Point the Vaults tab at a deployment by creating `.env.local`:
-
-```
-NEXT_PUBLIC_DIVS_VAULT_ADDRESS=0x...
-NEXT_PUBLIC_STOCK_TOKEN_ADDRESS=0x...
-```
-
-Without those, the Vaults tab renders a configuration notice instead of calling
-into the zero address.
-
 ### Driving it against a local chain
-
-The fastest way to exercise deposit/harvest/withdraw for real. Three terminals:
 
 ```bash
 cd contracts && npm run node
@@ -96,29 +89,28 @@ cd contracts && npm run node
 cd contracts && npm run deploy:local
 ```
 
-`deploy:local` deploys a `MockStockToken` + `DivsVault` pair, mints 1000 MSTK to
-the first account, and writes both addresses into `.env.local` for you.
-
-```bash
-pnpm dev
-```
-
-Point your wallet at `http://127.0.0.1:8545` (chain 31337) and open the Vaults
-tab. To simulate a dividend — or a downward correction — move the multiplier:
-
-```bash
-cd contracts && npm run rebase --multiplier=1.5
-```
-
-The panel watches the chain head, so pending yield updates on the next block
-without a reload. Chain 31337 is only offered in development builds; override
-its RPC with `NEXT_PUBLIC_LOCAL_RPC_URL`, or force it into a preview build with
-`NEXT_PUBLIC_ENABLE_LOCAL_CHAIN=true`.
+`deploy:local` deploys mock DIVS/WETH/LP tokens plus `DivsStaking`, wires both
+pools, funds emissions, stakes a locked position, and pushes a fee through so the
+accumulator is non-zero.
 
 ```bash
 pnpm build && pnpm lint && pnpm typecheck
 ```
 
-> **Note on the rest of the dashboard.** Only the Vaults tab is wired to a
-> contract. The order book, price chart, stakes and positions tables are still
-> hard-coded placeholders — there is no price feed or indexer behind them yet.
+Chain 31337 is only offered in development builds; override its RPC with
+`NEXT_PUBLIC_LOCAL_RPC_URL`, or force it into a preview build with
+`NEXT_PUBLIC_ENABLE_LOCAL_CHAIN=true`.
+
+## Status
+
+Not launched. What exists:
+
+- `DivsStaking.sol` — written, tested, **not audited and not deployed**
+- The dashboard — every price, APR and volume in it is placeholder data. There
+  is no price feed or indexer behind it.
+
+What does not exist yet: the DIVS token, the launchpad and its Uniswap V4 pool
+hook, the buy-side fee swap to WETH, the emission schedule, pause/emergency
+controls, and a multisig owner. The staking contract takes token addresses in its
+constructor and receives WETH via `notifyFee`, so it slots in behind the fee
+distributor once that is built.

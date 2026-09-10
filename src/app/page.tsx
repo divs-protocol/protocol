@@ -8,7 +8,6 @@ import {
   Search, Bell, ArrowUpRight, ArrowDownRight, ChevronDown
 } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
-import VaultPanel from "./_components/VaultPanel";
 
 const STOCKS = [
   { 
@@ -272,7 +271,7 @@ export default function Home() {
 
           {/* DASHBOARD CONTENT BODY */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-none">
-            
+
             {/* 1. POOLS VIEW */}
             {activeSection === "pools" && (
               <>
@@ -565,12 +564,17 @@ export default function Home() {
             {activeSection === "vaults" && (
               <div className="space-y-3">
                 <div>
-                  <h2 className="text-white font-bold text-base">Yield Vaults</h2>
+                  <h2 className="text-white font-bold text-base">Staking</h2>
                   <p className="text-gray-500 text-[10px] mt-0.5">
-                    Deposit ERC-8056 stock tokens and harvest the dividend multiplier growth.
+                    Stake DIVS or DIVS/WETH LP to earn a share of protocol trading fees.
                   </p>
                 </div>
-                <VaultPanel />
+                <div className="bg-[#1B1E24] border border-[#232730] rounded-2xl p-8 text-center">
+                  <p className="text-gray-400 text-xs">
+                    Staking is not yet live. The contract is written and tested; it goes live once
+                    DIVS is deployed and the launchpad begins routing fees.
+                  </p>
+                </div>
               </div>
             )}
 

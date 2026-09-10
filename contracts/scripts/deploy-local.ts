@@ -1,53 +1,69 @@
 /**
- * Deploys a MockStockToken + DivsVault pair to a running `hardhat node`, seeds
- * the first account with tokens, and writes the addresses into the web app's
- * .env.local so the UI picks them up on the next reload.
+ * Deploys DivsStaking against freshly minted mock DIVS / WETH / LP tokens on a
+ * local node, wires two pools, funds emissions, and pushes a fee through so the
+ * accumulator is non-zero on first look.
  *
- *   npm run node          # terminal 1
- *   npm run deploy:local  # terminal 2
+ *   npx hardhat node
+ *   npx hardhat run scripts/deploy-local.ts --network localhost
  */
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { network } from "hardhat";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const envPath = resolve(here, "../../.env.local");
+const WEEK = 7n * 24n * 60n * 60n;
 
-/** Rewrites only the keys we own, leaving anything else in the file intact. */
-function updateEnv(values: Record<string, string>) {
-  const existing = existsSync(envPath) ? readFileSync(envPath, "utf8") : "";
-  const lines = existing.split(/\r?\n/).filter((l) => l.trim() !== "");
-  const kept = lines.filter((l) => !Object.keys(values).some((k) => l.startsWith(`${k}=`)));
-  const next = [...kept, ...Object.entries(values).map(([k, v]) => `${k}=${v}`)];
-  writeFileSync(envPath, next.join("\n") + "\n");
+async function main() {
+  const { ethers } = await network.connect();
+  const [deployer, alice] = await ethers.getSigners();
+
+  const divs = await ethers.deployContract("MockERC20", ["Divs", "DIVS"]);
+  const weth = await ethers.deployContract("MockERC20", ["Wrapped Ether", "WETH"]);
+  const lp = await ethers.deployContract("MockERC20", ["DIVS/WETH LP", "DIVS-LP"]);
+  await Promise.all([divs.waitForDeployment(), weth.waitForDeployment(), lp.waitForDeployment()]);
+
+  const staking = await ethers.deployContract("DivsStaking", [
+    await divs.getAddress(),
+    await weth.getAddress(),
+    deployer.address,
+  ]);
+  await staking.waitForDeployment();
+
+  // Pool 0: single-sided DIVS at 1x. Pool 1: DIVS/WETH LP at 2x.
+  await (await staking.addPool(await divs.getAddress(), 10_000n)).wait();
+  await (await staking.addPool(await lp.getAddress(), 20_000n)).wait();
+
+  // Fund an emission budget. Emissions are capped by this reserve, so without it
+  // stakers would accrue claims the contract cannot pay.
+  const emissionBudget = ethers.parseEther("100000");
+  await (await divs.mint(deployer.address, emissionBudget)).wait();
+  await (await divs.approve(await staking.getAddress(), emissionBudget)).wait();
+  await (await staking.fundEmissions(emissionBudget)).wait();
+  await (await staking.setEmissionRate(ethers.parseEther("0.1"))).wait();
+
+  // Give alice a locked position so the dashboard has something to render.
+  const stakeAmount = ethers.parseEther("1000");
+  await (await divs.mint(alice.address, stakeAmount)).wait();
+  await (await divs.connect(alice).approve(await staking.getAddress(), stakeAmount)).wait();
+  await (await staking.connect(alice).stake(0n, stakeAmount, 52n)).wait();
+
+  // Push a fee through as the launchpad eventually will.
+  const fee = ethers.parseEther("5");
+  await (await weth.mint(deployer.address, fee)).wait();
+  await (await weth.approve(await staking.getAddress(), fee)).wait();
+  await (await staking.notifyFee(fee)).wait();
+
+  const [pendingWeth, pendingDivs] = await staking.pendingRewards(alice.address);
+
+  console.log("\nDeployed to localhost (chain 31337):");
+  console.log("  DivsStaking :", await staking.getAddress());
+  console.log("  DIVS        :", await divs.getAddress());
+  console.log("  WETH        :", await weth.getAddress());
+  console.log("  LP          :", await lp.getAddress());
+  console.log("\nAlice staked 1000 DIVS locked 52 weeks (4x weight)");
+  console.log("  pending WETH:", ethers.formatEther(pendingWeth));
+  console.log("  pending DIVS:", ethers.formatEther(pendingDivs));
+  console.log("\nLock ends in", WEEK * 52n, "seconds of chain time.");
 }
 
-const { ethers } = await network.create({ network: "localhost", chainType: "l1" });
-
-const [deployer] = await ethers.getSigners();
-
-// Start at 1.0 so the UI multiplier reads naturally; `rebase.ts` moves it later.
-const token = await ethers.deployContract("MockStockToken", [10n ** 18n]);
-await token.waitForDeployment();
-const tokenAddress = await token.getAddress();
-
-const vault = await ethers.deployContract("DivsVault", [deployer.address]);
-await vault.waitForDeployment();
-const vaultAddress = await vault.getAddress();
-
-const mintAmount = 1000n * 10n ** 18n;
-await (await token.mint(deployer.address, mintAmount)).wait();
-
-updateEnv({
-  NEXT_PUBLIC_DIVS_VAULT_ADDRESS: vaultAddress,
-  NEXT_PUBLIC_STOCK_TOKEN_ADDRESS: tokenAddress,
+main().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
 });
-
-console.log("Deployer:      ", deployer.address);
-console.log("MockStockToken:", tokenAddress);
-console.log("DivsVault:     ", vaultAddress);
-console.log("Minted:        ", ethers.formatUnits(mintAmount, 18), "MSTK to deployer");
-console.log("Wrote:         ", envPath);
-console.log();
-console.log("Reload the web app; the Vaults tab will pick these up.");
