@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { 
@@ -218,10 +219,17 @@ export default function Home() {
         <div className="flex-1 flex flex-col overflow-hidden">
 
           {/* TOP HEADER */}
-          <header className="h-14 border-b border-[#1F2228] px-5 flex items-center justify-between bg-[#14161B] flex-shrink-0">
+          <header className="h-14 border-b border-[#1F2228] px-5 flex items-center justify-between gap-6 bg-[#14161B] flex-shrink-0">
             {/* Branding Logo */}
-            <div className="flex items-center space-x-2.5">
-              {/* Logo mark slots in here */}
+            <div className="flex items-center space-x-2.5 flex-shrink-0">
+              <Image
+                src="/logo.png"
+                alt=""
+                width={28}
+                height={30}
+                priority
+                className="h-[26px] w-auto"
+              />
               <span className="text-base font-extrabold tracking-tight text-white">DIVS</span>
             </div>
 
@@ -241,7 +249,7 @@ export default function Home() {
             </div>
 
             {/* Header Search Input Bar */}
-            <div className="relative w-72">
+            <div className="relative w-72 min-w-0 shrink">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
               <input 
                 type="text" 
