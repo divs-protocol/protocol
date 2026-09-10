@@ -188,7 +188,7 @@ staking.unstake(poolId, amount)`}</Pre>
       />
 
       <Note>
-        Partial unstaking is supported — pass any amount up to your position. Rewards accrued so far
+        Partial unstaking is supported - pass any amount up to your position. Rewards accrued so far
         are settled before the withdrawal, so you never lose earnings by exiting.
       </Note>
 
@@ -263,10 +263,10 @@ function Weight() {
         Two stakers, identical principal, different commitment. Both in the single-sided pool at 1x,
         no tier reached:
       </P>
-      <Pre>{`Alice — 1,000 DIVS locked 52 weeks
+      <Pre>{`Alice - 1,000 DIVS locked 52 weeks
   weight = 1,000 × 1.0 × 1.0 × 4.0 = 4,000
 
-Bob   — 1,000 DIVS flexible
+Bob   - 1,000 DIVS flexible
   weight = 1,000 × 1.0 × 1.0 × 1.0 = 1,000
 
 totalWeight = 5,000
@@ -310,7 +310,7 @@ claim = weight × accWethPerWeight − debt     // your entitlement`}</Pre>
       <H>Solvency</H>
       <P>
         <C>notifyFee</C> transfers the WETH into the contract <em>before</em> raising the
-        accumulator. The contract cannot distribute revenue it does not hold — this is enforced by
+        accumulator. The contract cannot distribute revenue it does not hold - this is enforced by
         ordering in the code, not by policy or by an off-chain process.
       </P>
       <P>
@@ -331,7 +331,7 @@ function Emissions() {
       <H>What emissions are</H>
       <P>
         $DIVS paid to stakers on top of fee revenue, to attract liquidity early while trading volume
-        is still building. Emissions are an incentive funded from treasury — they are not revenue,
+        is still building. Emissions are an incentive funded from treasury - they are not revenue,
         and unlike fees they are not sustainable indefinitely.
       </P>
 
@@ -405,7 +405,7 @@ function Reference() {
         rows={[
           [<C key="1">pendingRewards(address user)</C>, "Unclaimed WETH and DIVS, including live accrual."],
           [<C key="2">currentWeight(uint256 poolId, address user)</C>, "The weight the position carries right now."],
-          [<C key="3">lockMultiplierBps(uint256 lockWeeks)</C>, "10000–40000 (1x–4x)."],
+          [<C key="3">lockMultiplierBps(uint256 lockWeeks)</C>, "10000-40000 (1x-4x)."],
           [<C key="4">tierMultiplierBps(uint256 amount)</C>, "Tier multiplier for a position size."],
           [<C key="5">positions(uint256 poolId, address user)</C>, "amount, weight, lockEnd, lockWeeks."],
           [<C key="6">lastTimeEmissionApplicable()</C>, "min(now, periodFinish)."],
