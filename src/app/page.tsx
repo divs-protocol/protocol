@@ -13,6 +13,7 @@ import DocsSection from "./_components/DocsSection";
 import LandingSection from "./_components/LandingSection";
 import MarketsSection from "./_components/MarketsSection";
 import TradeSection from "./_components/TradeSection";
+import AnalyticsSection from "./_components/AnalyticsSection";
 
 const STOCKS = [
   { 
@@ -261,7 +262,14 @@ export default function Home() {
               >
                 Trade
               </button>
-              <button className="text-gray-400 hover:text-white transition">Analytics</button>
+              <button
+                onClick={() => setActiveSection("analytics")}
+                className={`transition ${
+                  activeSection === "analytics" ? "text-[#10B981]" : "text-gray-400 hover:text-white"
+                }`}
+              >
+                Analytics
+              </button>
             </div>
 
             {/* Header Search Input Bar */}
@@ -624,9 +632,11 @@ export default function Home() {
 
             {activeSection === "trade" && <TradeSection />}
 
+            {activeSection === "analytics" && <AnalyticsSection />}
+
             {activeSection === "docs" && <DocsSection />}
 
-            {!["protocol", "markets", "trade", "pools", "stakes", "positions", "vaults", "docs"].includes(activeSection) && (
+            {!["protocol", "markets", "trade", "analytics", "pools", "stakes", "positions", "vaults", "docs"].includes(activeSection) && (
               <div className="h-full flex flex-col items-center justify-center bg-[#1B1E24] border border-[#232730] rounded-2xl p-8 text-center min-h-[400px]">
                 <div className="w-12 h-12 bg-[#10B981]/10 border border-[#10B981]/30 text-[#10B981] rounded-2xl flex items-center justify-center mb-3">
                   {NAV_ITEMS.find((n) => n.id === activeSection)?.icon && (
