@@ -1,36 +1,124 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DIVS Protocol
 
-## Getting Started
+Yield stripping for tokenized stocks. Depositors hand the vault a rebasing
+ERC-8056 stock token; the vault separates the dividend growth — the rise in the
+token's `uiMultiplier` — from the principal and pays it out as harvestable
+yield, minus a protocol fee.
 
-First, run the development server:
+## Layout
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+| Path         | What it is                                                        |
+| ------------ | ----------------------------------------------------------------- |
+| `src/`       | Next.js 16 dashboard (App Router, Tailwind 4, wagmi + viem)        |
+| `contracts/` | Hardhat 3 project: `DivsVault.sol` and its Solidity test suite     |
+
+The two halves are **separate npm projects on purpose**. The root uses pnpm; the
+Hardhat project keeps its own `package-lock.json` and `node_modules` and is
+installed with npm. Install and run them independently.
+
+## Vault accounting
+
+A position is stored as `{ rawAmount, entryMultiplier }`, and the depositor's
+claim on the vault is always:
+
+```
+claim = rawAmount * currentMultiplier / entryMultiplier
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`rawAmount` is denominated in token units *as of `entryMultiplier`*, never in raw
+display units, so every conversion in and out scales through that ratio. Three
+consequences worth knowing before changing anything in `DivsVault.sol`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Yield is proportional, not absolute.** `pendingYield` divides by
+  `entryMultiplier`, not by a fixed `1e18`. Dividing by a constant overpays
+  anyone who entered above 1e18 and does so out of other depositors' principal.
+- **Deposits credit the balance delta**, not the requested amount. Rebasing
+  tokens floor the share conversion and fee-on-transfer tokens skim; crediting
+  the request leaves the vault permanently short, and the gap compounds with
+  every later rebase.
+- **A downward rebase falls on the depositor holding it.** `withdraw` scales the
+  principal to the live multiplier, so a fall in the underlying is not
+  socialised onto everyone else.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The vault pays yield out of its own token balance, which is solvent **only
+because the token genuinely rebases `balanceOf`**. If `uiMultiplier` were a
+display-only figure, every harvest would be funded from the next deposit. See
+`test_PendingYieldEqualsActualVaultBalanceGrowth`.
 
-## Learn More
+## Contracts
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+cd contracts && npm install
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+cd contracts && npx hardhat test
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Solidity unit tests live in `contracts/DivsVault.t.sol` and run on forge-std.
+`MockStockToken` is a share-based rebasing ERC-8056 token used to drive them.
 
-## Deploy on Vercel
+Deploy:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+cd contracts && npx hardhat ignition deploy ignition/modules/DivsVault.ts --network sepolia
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`feeCollector` defaults to the deploying account; override it with a parameters
+file (see the header of `ignition/modules/DivsVault.ts`). Sepolia needs
+`SEPOLIA_RPC_URL` and `SEPOLIA_PRIVATE_KEY` set via `npx hardhat keystore set`.
+
+## Web app
+
+```bash
+pnpm install && pnpm dev
+```
+
+Point the Vaults tab at a deployment by creating `.env.local`:
+
+```
+NEXT_PUBLIC_DIVS_VAULT_ADDRESS=0x...
+NEXT_PUBLIC_STOCK_TOKEN_ADDRESS=0x...
+```
+
+Without those, the Vaults tab renders a configuration notice instead of calling
+into the zero address.
+
+### Driving it against a local chain
+
+The fastest way to exercise deposit/harvest/withdraw for real. Three terminals:
+
+```bash
+cd contracts && npm run node
+```
+
+```bash
+cd contracts && npm run deploy:local
+```
+
+`deploy:local` deploys a `MockStockToken` + `DivsVault` pair, mints 1000 MSTK to
+the first account, and writes both addresses into `.env.local` for you.
+
+```bash
+pnpm dev
+```
+
+Point your wallet at `http://127.0.0.1:8545` (chain 31337) and open the Vaults
+tab. To simulate a dividend — or a downward correction — move the multiplier:
+
+```bash
+cd contracts && npm run rebase --multiplier=1.5
+```
+
+The panel watches the chain head, so pending yield updates on the next block
+without a reload. Chain 31337 is only offered in development builds; override
+its RPC with `NEXT_PUBLIC_LOCAL_RPC_URL`, or force it into a preview build with
+`NEXT_PUBLIC_ENABLE_LOCAL_CHAIN=true`.
+
+```bash
+pnpm build && pnpm lint && pnpm typecheck
+```
+
+> **Note on the rest of the dashboard.** Only the Vaults tab is wired to a
+> contract. The order book, price chart, stakes and positions tables are still
+> hard-coded placeholders — there is no price feed or indexer behind them yet.
