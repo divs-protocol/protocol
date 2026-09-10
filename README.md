@@ -100,17 +100,3 @@ pnpm build && pnpm lint && pnpm typecheck
 Chain 31337 is only offered in development builds; override its RPC with
 `NEXT_PUBLIC_LOCAL_RPC_URL`, or force it into a preview build with
 `NEXT_PUBLIC_ENABLE_LOCAL_CHAIN=true`.
-
-## Status
-
-Not launched. What exists:
-
-- `DivsStaking.sol` — written, tested, **not audited and not deployed**
-- The dashboard — every price, APR and volume in it is placeholder data. There
-  is no price feed or indexer behind it.
-
-What does not exist yet: the DIVS token, the launchpad and its Uniswap V4 pool
-hook, the buy-side fee swap to WETH, the emission schedule, pause/emergency
-controls, and a multisig owner. The staking contract takes token addresses in its
-constructor and receives WETH via `notifyFee`, so it slots in behind the fee
-distributor once that is built.
