@@ -1,7 +1,11 @@
 /**
- * Deploys DivsStaking against freshly minted mock DIVS / WETH / LP tokens on a
- * local node, wires two pools, funds emissions, and pushes a fee through so the
- * accumulator is non-zero on first look.
+ * Deploys the real DivsToken plus DivsStaking on a local node, against mock
+ * WETH and LP, wires two pools, funds emissions, and pushes a fee through so
+ * the accumulator is non-zero on first look.
+ *
+ * DIVS is the production token here, not a mock: its supply is fixed at
+ * deployment, so everything below is funded by transferring from the deployer's
+ * balance rather than minting on demand.
  *
  *   npx hardhat node
  *   npx hardhat run scripts/deploy-local.ts --network localhost
@@ -14,7 +18,8 @@ async function main() {
   const { ethers } = await network.connect();
   const [deployer, alice] = await ethers.getSigners();
 
-  const divs = await ethers.deployContract("MockERC20", ["Divs", "DIVS"]);
+  // The whole fixed supply lands with the deployer, standing in for a treasury.
+  const divs = await ethers.deployContract("DivsToken", [deployer.address]);
   const weth = await ethers.deployContract("MockERC20", ["Wrapped Ether", "WETH"]);
   const lp = await ethers.deployContract("MockERC20", ["DIVS/WETH LP", "DIVS-LP"]);
   await Promise.all([divs.waitForDeployment(), weth.waitForDeployment(), lp.waitForDeployment()]);
@@ -34,13 +39,12 @@ async function main() {
   // emissions can never be scheduled without the DIVS to back them.
   const emissionBudget = ethers.parseEther("100000");
   const emissionDuration = 30n * 24n * 60n * 60n;
-  await (await divs.mint(deployer.address, emissionBudget)).wait();
   await (await divs.approve(await staking.getAddress(), emissionBudget)).wait();
   await (await staking.notifyEmission(emissionBudget, emissionDuration)).wait();
 
   // Give alice a locked position so the dashboard has something to render.
   const stakeAmount = ethers.parseEther("1000");
-  await (await divs.mint(alice.address, stakeAmount)).wait();
+  await (await divs.transfer(alice.address, stakeAmount)).wait();
   await (await divs.connect(alice).approve(await staking.getAddress(), stakeAmount)).wait();
   await (await staking.connect(alice).stake(0n, stakeAmount, 52n)).wait();
 
@@ -54,7 +58,7 @@ async function main() {
 
   console.log("\nDeployed to localhost (chain 31337):");
   console.log("  DivsStaking :", await staking.getAddress());
-  console.log("  DIVS        :", await divs.getAddress());
+  console.log("  DIVS        :", await divs.getAddress(), `(supply ${ethers.formatEther(await divs.totalSupply())})`);
   console.log("  WETH        :", await weth.getAddress());
   console.log("  LP          :", await lp.getAddress());
   console.log("\nAlice staked 1000 DIVS locked 52 weeks (4x weight)");
