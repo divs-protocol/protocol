@@ -432,8 +432,19 @@ export default function Home() {
                         <span className="text-gray-400 text-xs">Total:</span>
                         <span className="text-[#10B981] font-extrabold text-sm">$65,173</span>
                       </div>
-                      <button className="w-full bg-[#10B981] hover:bg-[#0EA5E9] text-black font-extrabold py-2 rounded-xl transition">
-                        Place Order
+                      <button
+                        onClick={() =>
+                          !isConnected && injectedConnector && connect({ connector: injectedConnector })
+                        }
+                        disabled={isConnected}
+                        title={
+                          isConnected
+                            ? "Trading opens when the launchpad is deployed"
+                            : undefined
+                        }
+                        className="w-full bg-[#10B981] hover:bg-[#0EA372] disabled:opacity-40 disabled:cursor-not-allowed text-black font-extrabold py-2 rounded-xl transition"
+                      >
+                        {isConnected ? "Place Order" : "Connect Wallet"}
                       </button>
                     </div>
                   </div>
@@ -465,7 +476,7 @@ export default function Home() {
                   </div>
 
                   <div className="col-span-3 bg-[#1B1E24] border border-[#232730] rounded-2xl p-3.5">
-                    <h3 className="text-white font-bold mb-2">Create Order</h3>
+                    <h3 className="text-white font-bold mb-2">Recent Trades</h3>
                     <div className="flex justify-between text-[9px] text-gray-500 mb-2 border-b border-[#232730] pb-1">
                       <span>Price</span>
                       <span>Amount</span>
@@ -482,7 +493,7 @@ export default function Home() {
 
                   <div className="col-span-3 bg-[#1B1E24] border border-[#232730] rounded-2xl p-3.5">
                     <div className="flex justify-between items-center mb-2">
-                      <h3 className="text-white font-bold">My Order</h3>
+                      <h3 className="text-white font-bold">Market Activity</h3>
                       <button className="text-[9px] text-[#10B981] hover:underline font-semibold">View all</button>
                     </div>
                     <div className="space-y-1.5 font-mono text-[10px]">
