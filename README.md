@@ -40,10 +40,12 @@ Two rules carry solvency, and both are enforced structurally rather than assumed
   WETH first and only then raises the accumulator, so the contract cannot promise
   revenue it does not hold. It is permissionless — an unauthorised caller can
   only donate.
-- **Emissions pay strictly from `emissionReserve`.** DIVS is both a staked and an
-  emitted asset, so without an explicit funded reserve an emission would be paid
-  out of another staker's principal. `totalStakedDivs` is tracked separately and
-  never drawn on.
+- **Emissions are funded before they are scheduled.** `notifyEmission(amount,
+  duration)` pulls the DIVS in and *derives* the rate from what arrived, rather
+  than taking a rate on trust. Accrual stops at `periodFinish` unless a new
+  period is funded, so the contract cannot build claims nothing backs. DIVS is
+  both a staked and an emitted asset, so `emissionsFunded` counts explicit
+  funding only and `totalStakedDivs` is never drawn on.
 
 Any weight change must settle outstanding rewards into `pending` before it takes
 effect, so every mutating path routes through `_settle`.
@@ -51,13 +53,11 @@ effect, so every mutating path routes through `_settle`.
 `poke` is permissionless: a staker has no incentive to demote their own expired
 lock, and an expired boost would otherwise keep diluting everyone still locked.
 
-### Known decision, not yet made
-
-Emissions accrue whether or not the reserve is funded. Setting a rate against an
-empty reserve builds claims nobody can pay, and whoever claims first after a
-later top-up drains it. Payouts are capped at the reserve and the remainder stays
-pending, which is safe but accumulates an unfunded IOU. The alternative is to
-halt accrual when the reserve empties.
+Emission periods follow the Synthetix `StakingRewards` pattern: funding defines
+the rate, so there is no way to promise emissions that are not held, and no
+first-come-first-served race over a short reserve. Calling `notifyEmission`
+mid-period rolls the unspent remainder into the new rate. Time passing with
+nothing staked emits nothing, leaving that budget available for a later period.
 
 ## Contracts
 

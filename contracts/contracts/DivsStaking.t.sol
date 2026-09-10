@@ -142,68 +142,107 @@ contract DivsStakingTest is Test {
 
     // --- emissions ---------------------------------------------------------
 
-    function test_EmissionsAccrueOverTime() public {
-        divs.mint(owner, 100_000e18);
+    /// @dev Helper: fund a period as the owner.
+    function _notifyEmission(uint256 amount, uint256 duration) internal {
+        divs.mint(owner, amount);
         vm.startPrank(owner);
-        divs.approve(address(staking), type(uint256).max);
-        staking.fundEmissions(100_000e18);
-        staking.setEmissionRate(1e18); // 1 DIVS/sec
+        divs.approve(address(staking), amount);
+        staking.notifyEmission(amount, duration);
         vm.stopPrank();
+    }
 
+    function test_NotifyEmissionDerivesRateFromAmountFunded() public {
+        _notifyEmission(1000e18, 1000);
+        assertEq(staking.emissionRate(), 1e18, "rate is funding divided by duration");
+        assertEq(staking.periodFinish(), block.timestamp + 1000, "period ends after the duration");
+    }
+
+    function test_EmissionsAccrueOverTime() public {
+        _notifyEmission(1000e18, 1000); // 1 DIVS/sec
         _stake(alice, DIVS_POOL, 100e18, 0);
         vm.warp(block.timestamp + 100);
 
         (, uint256 pendingDivs) = staking.pendingRewards(alice);
-        assertEq(pendingDivs, 100e18, "sole staker accrues the whole emission rate");
+        assertEq(pendingDivs, 100e18, "sole staker accrues the whole rate");
     }
 
-    /// @dev The defect this guards against: DIVS is both staked and emitted, so an
-    /// unfunded emission would be paid out of another user's staked principal.
-    function test_EmissionsNeverSpendStakedPrincipal() public {
-        vm.prank(owner);
-        staking.setEmissionRate(1e18); // rate set, but nothing funded
-
+    /// @dev The point of epoch funding: entitlement stops growing when the funded
+    /// period ends, instead of building claims nothing backs.
+    function test_EmissionsHaltAtPeriodFinish() public {
+        _notifyEmission(100e18, 100); // 1 DIVS/sec for 100s
         _stake(alice, DIVS_POOL, 100e18, 0);
-        _stake(bob, DIVS_POOL, 100e18, 0);
-        vm.warp(block.timestamp + 1000);
 
-        uint256 stakedBefore = staking.totalStakedDivs();
+        vm.warp(block.timestamp + 500); // five times the period
+
+        (, uint256 pendingDivs) = staking.pendingRewards(alice);
+        assertEq(pendingDivs, 100e18, "accrual must stop at periodFinish, not run on");
 
         vm.prank(alice);
         (, uint256 divsOut) = staking.claim();
+        assertEq(divsOut, 100e18, "the full funded amount is payable");
+        assertEq(staking.emissionReserve(), 0, "reserve is exactly drained, no IOU left");
+    }
 
-        assertEq(divsOut, 0, "unfunded emissions must pay nothing");
-        assertEq(divs.balanceOf(alice), 1_000_000e18 - 100e18, "principal must be untouched");
-        assertEq(staking.totalStakedDivs(), stakedBefore, "staked total must not move");
-        assertGe(
-            divs.balanceOf(address(staking)),
-            staking.totalStakedDivs(),
-            "contract must still cover every staked position"
-        );
+    function test_EmissionsCannotBeScheduledWithoutFunding() public {
+        _stake(alice, DIVS_POOL, 100e18, 0);
+        vm.warp(block.timestamp + 365 days);
 
-        // Bob can still exit in full, which is the property that would break.
+        assertEq(staking.emissionRate(), 0, "no rate exists until a period is funded");
+        (, uint256 pendingDivs) = staking.pendingRewards(alice);
+        assertEq(pendingDivs, 0, "nothing accrues without funding");
+    }
+
+    /// @dev DIVS is both staked and emitted. Staked principal must never be
+    /// treated as emission budget, or one staker is paid out of another.
+    function test_StakedPrincipalIsNeverEmitted() public {
+        _stake(alice, DIVS_POOL, 500_000e18, 0);
+        _stake(bob, DIVS_POOL, 500_000e18, 0);
+        // The contract now holds 1M DIVS, every unit of it someone else's principal.
+        assertEq(divs.balanceOf(address(staking)), 1_000_000e18, "contract holds only principal");
+        assertEq(staking.emissionsFunded(), 0, "none of it counts as emission budget");
+
+        vm.warp(block.timestamp + 365 days);
+        vm.prank(alice);
+        (, uint256 divsOut) = staking.claim();
+        assertEq(divsOut, 0, "principal must not be emitted");
+
         vm.prank(bob);
-        staking.unstake(DIVS_POOL, 100e18);
-        assertEq(divs.balanceOf(bob), 1_000_000e18, "second staker must recover full principal");
+        staking.unstake(DIVS_POOL, 500_000e18);
+        assertEq(divs.balanceOf(bob), 1_000_000e18, "the other staker exits whole");
     }
 
-    function test_EmissionsCappedByReserveAndRemainderStaysPending() public {
-        divs.mint(owner, 50e18);
-        vm.startPrank(owner);
-        divs.approve(address(staking), type(uint256).max);
-        staking.fundEmissions(50e18);
-        staking.setEmissionRate(1e18);
-        vm.stopPrank();
+    function test_MidPeriodNotifyRollsRemainderIntoNewRate() public {
+        _stake(alice, DIVS_POOL, 100e18, 0);
+        _notifyEmission(100e18, 100); // 1/sec
+        vm.warp(block.timestamp + 50); // 50 accrued, 50 remaining
+
+        _notifyEmission(50e18, 100); // 50 new + 50 rolled over, over 100s
+        assertEq(staking.emissionRate(), 1e18, "remainder rolls into the new rate");
+    }
+
+    /// @dev Time passing with nothing staked emits nothing, so that budget stays
+    /// available rather than being burned to an empty pool.
+    function test_BudgetIsNotBurnedWhileNothingIsStaked() public {
+        _notifyEmission(100e18, 100);
+        vm.warp(block.timestamp + 200); // whole period elapses with no stakers
+
+        assertEq(staking.emissionsAccrued(), 0, "nothing accrues to an empty pool");
 
         _stake(alice, DIVS_POOL, 100e18, 0);
-        vm.warp(block.timestamp + 100); // accrues 100, only 50 funded
+        _notifyEmission(100e18, 100); // the untouched budget is still fundable
+        vm.warp(block.timestamp + 100);
 
-        vm.prank(alice);
-        (, uint256 divsOut) = staking.claim();
-        assertEq(divsOut, 50e18, "payout is capped at the funded reserve");
+        (, uint256 pendingDivs) = staking.pendingRewards(alice);
+        assertEq(pendingDivs, 100e18, "the later period pays out in full");
+    }
 
-        (, uint256 stillPending) = staking.pendingRewards(alice);
-        assertEq(stillPending, 50e18, "the shortfall stays owed rather than vanishing");
+    function test_NotifyEmissionRejectsZeroDuration() public {
+        divs.mint(owner, 100e18);
+        vm.startPrank(owner);
+        divs.approve(address(staking), 100e18);
+        vm.expectRevert("Zero duration");
+        staking.notifyEmission(100e18, 0);
+        vm.stopPrank();
     }
 
     // --- locks -------------------------------------------------------------
@@ -297,7 +336,7 @@ contract DivsStakingTest is Test {
     function test_OnlyOwnerCanConfigure() public {
         vm.prank(alice);
         vm.expectRevert();
-        staking.setEmissionRate(1e18);
+        staking.notifyEmission(1e18, 100);
 
         vm.prank(alice);
         vm.expectRevert();
@@ -349,8 +388,7 @@ contract DivsStakingTest is Test {
         bobStake = uint96(bound(bobStake, 1e12, 100_000e18));
         feeAmount = uint96(bound(feeAmount, 1e12, 100_000e18));
 
-        vm.prank(owner);
-        staking.setEmissionRate(1e18); // deliberately unfunded
+        _notifyEmission(1000e18, 1000);
 
         _stake(alice, DIVS_POOL, aliceStake, 0);
         _stake(bob, DIVS_POOL, bobStake, 0);
@@ -365,8 +403,8 @@ contract DivsStakingTest is Test {
         vm.prank(bob);
         staking.unstake(DIVS_POOL, bobStake);
 
-        assertEq(divs.balanceOf(alice), 1_000_000e18, "alice recovers her full principal");
-        assertEq(divs.balanceOf(bob), 1_000_000e18, "bob recovers his full principal");
+        assertGe(divs.balanceOf(alice), 1_000_000e18, "alice recovers at least her principal");
+        assertGe(divs.balanceOf(bob), 1_000_000e18, "bob recovers at least his principal");
         assertEq(staking.totalStakedDivs(), 0, "staked accounting returns to zero");
     }
 }

@@ -15,10 +15,11 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 /// 1. Fees are only ever distributed after they have actually arrived. `notifyFee`
 ///    pulls WETH in and only then raises the accumulator, so the contract cannot
 ///    promise revenue it does not hold.
-/// 2. Emissions are paid strictly from `emissionReserve`, which is funded by an
-///    explicit transfer. DIVS is both a staked asset and a reward asset, so
-///    without this split an emission payout would silently spend staked
-///    principal. `totalStakedDivs` is tracked separately and never drawn on.
+/// 2. Emissions are funded before they are scheduled. `notifyEmission` pulls the
+///    DIVS in and derives the rate from what arrived, so the contract can only
+///    promise emissions it is holding. DIVS is both a staked and an emitted
+///    asset, so `emissionsFunded` counts explicit funding only and
+///    `totalStakedDivs` is never drawn on.
 ///
 /// Reward accounting is the standard accumulator: a claim is
 /// `weight * accPerWeight - debt`, so a weight change must settle outstanding
@@ -70,6 +71,12 @@ contract DivsStaking is Ownable, ReentrancyGuard {
     uint256 public accDivsPerWeight;
     uint256 public emissionRate;
     uint256 public lastEmissionUpdate;
+    /// @notice Emissions stop accruing here unless a new period is funded.
+    uint256 public periodFinish;
+    /// @dev Lifetime totals. Their difference is the budget not yet promised out,
+    /// which is what a new period may draw on.
+    uint256 public emissionsFunded;
+    uint256 public emissionsAccrued;
 
     /// @dev Fees that arrived while nothing was staked, folded into the next notify.
     uint256 public unallocatedFees;
@@ -85,8 +92,7 @@ contract DivsStaking is Ownable, ReentrancyGuard {
     event Unstaked(address indexed user, uint256 indexed poolId, uint256 amount, uint256 weight);
     event Claimed(address indexed user, uint256 wethAmount, uint256 divsAmount);
     event FeeNotified(address indexed from, uint256 amount);
-    event EmissionRateUpdated(uint256 rate);
-    event EmissionsFunded(address indexed from, uint256 amount);
+    event EmissionNotified(uint256 amount, uint256 rate, uint256 periodFinish);
 
     constructor(address _divs, address _weth, address _owner) Ownable(_owner) {
         require(_divs != address(0) && _weth != address(0), "Zero token");
@@ -127,21 +133,39 @@ contract DivsStaking is Ownable, ReentrancyGuard {
         emit TiersUpdated(thresholds, multipliersBps);
     }
 
-    function setEmissionRate(uint256 ratePerSecond) external onlyOwner {
-        _updateEmissions();
-        emissionRate = ratePerSecond;
-        emit EmissionRateUpdated(ratePerSecond);
-    }
-
-    /// @notice Fund the DIVS emission budget. Emissions can never exceed what is
-    /// funded here, which is what keeps staked principal untouchable.
-    function fundEmissions(uint256 amount) external nonReentrant {
+    /// @notice Fund an emission period. The rate is derived from the DIVS that
+    /// actually arrived rather than set independently, so emissions cannot be
+    /// promised without backing. Accrual halts at `periodFinish` unless renewed.
+    /// @dev Calling mid-period rolls the unspent remainder into the new one.
+    function notifyEmission(uint256 amount, uint256 duration) external onlyOwner nonReentrant {
         require(amount > 0, "Zero amount");
+        require(duration > 0, "Zero duration");
+        _updateEmissions();
+
         uint256 before = divs.balanceOf(address(this));
         divs.safeTransferFrom(msg.sender, address(this), amount);
         uint256 received = divs.balanceOf(address(this)) - before;
+        require(received > 0, "Nothing received");
+
         emissionReserve += received;
-        emit EmissionsFunded(msg.sender, received);
+        emissionsFunded += received;
+
+        uint256 rate;
+        if (block.timestamp >= periodFinish) {
+            rate = received / duration;
+        } else {
+            uint256 remaining = (periodFinish - block.timestamp) * emissionRate;
+            rate = (received + remaining) / duration;
+        }
+        require(rate > 0, "Rate rounds to zero");
+        // The unaccrued budget is the only thing a period may draw on. Staked
+        // principal is excluded because `emissionsFunded` counts funding alone.
+        require(rate * duration <= emissionsFunded - emissionsAccrued, "Insufficient emission budget");
+
+        emissionRate = rate;
+        lastEmissionUpdate = block.timestamp;
+        periodFinish = block.timestamp + duration;
+        emit EmissionNotified(received, rate, periodFinish);
     }
 
     // --- fee intake --------------------------------------------------------
@@ -237,8 +261,9 @@ contract DivsStaking is Ownable, ReentrancyGuard {
 
         wethOut = r.pendingWeth;
         divsOut = r.pendingDivs;
-        // Emissions are capped by the funded reserve; anything beyond it stays
-        // pending rather than dipping into staked principal.
+        // Backstop only: `notifyEmission` will not schedule more than the funded
+        // budget, so this cap should be unreachable. It stays because the
+        // alternative failure is paying emissions out of staked principal.
         if (divsOut > emissionReserve) divsOut = emissionReserve;
 
         r.pendingWeth = 0;
@@ -304,13 +329,23 @@ contract DivsStaking is Ownable, ReentrancyGuard {
 
     // --- reward accounting -------------------------------------------------
 
+    /// @notice Emissions accrue only up to the end of the funded period.
+    function lastTimeEmissionApplicable() public view returns (uint256) {
+        return block.timestamp < periodFinish ? block.timestamp : periodFinish;
+    }
+
     function _updateEmissions() internal {
-        if (block.timestamp == lastEmissionUpdate) return;
-        if (totalWeight > 0 && emissionRate > 0) {
-            uint256 elapsed = block.timestamp - lastEmissionUpdate;
-            accDivsPerWeight += (elapsed * emissionRate * ACC_PRECISION) / totalWeight;
+        uint256 applicable = lastTimeEmissionApplicable();
+        if (applicable > lastEmissionUpdate) {
+            if (totalWeight > 0 && emissionRate > 0) {
+                // Time passing with nothing staked emits nothing, leaving that
+                // budget unaccrued and available to a later period.
+                uint256 emitted = (applicable - lastEmissionUpdate) * emissionRate;
+                emissionsAccrued += emitted;
+                accDivsPerWeight += (emitted * ACC_PRECISION) / totalWeight;
+            }
         }
-        lastEmissionUpdate = block.timestamp;
+        if (block.timestamp > lastEmissionUpdate) lastEmissionUpdate = block.timestamp;
     }
 
     function _settle(address user) internal {
@@ -334,8 +369,9 @@ contract DivsStaking is Ownable, ReentrancyGuard {
     function pendingRewards(address user) external view returns (uint256 pendingWeth, uint256 pendingDivs) {
         Rewards memory r = rewards[user];
         uint256 accDivs = accDivsPerWeight;
-        if (block.timestamp > lastEmissionUpdate && totalWeight > 0 && emissionRate > 0) {
-            accDivs += ((block.timestamp - lastEmissionUpdate) * emissionRate * ACC_PRECISION) / totalWeight;
+        uint256 applicable = lastTimeEmissionApplicable();
+        if (applicable > lastEmissionUpdate && totalWeight > 0 && emissionRate > 0) {
+            accDivs += ((applicable - lastEmissionUpdate) * emissionRate * ACC_PRECISION) / totalWeight;
         }
         pendingWeth = r.pendingWeth;
         pendingDivs = r.pendingDivs;

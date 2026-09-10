@@ -30,13 +30,13 @@ async function main() {
   await (await staking.addPool(await divs.getAddress(), 10_000n)).wait();
   await (await staking.addPool(await lp.getAddress(), 20_000n)).wait();
 
-  // Fund an emission budget. Emissions are capped by this reserve, so without it
-  // stakers would accrue claims the contract cannot pay.
+  // Fund a 30-day emission period. The rate is derived from what is funded, so
+  // emissions can never be scheduled without the DIVS to back them.
   const emissionBudget = ethers.parseEther("100000");
+  const emissionDuration = 30n * 24n * 60n * 60n;
   await (await divs.mint(deployer.address, emissionBudget)).wait();
   await (await divs.approve(await staking.getAddress(), emissionBudget)).wait();
-  await (await staking.fundEmissions(emissionBudget)).wait();
-  await (await staking.setEmissionRate(ethers.parseEther("0.1"))).wait();
+  await (await staking.notifyEmission(emissionBudget, emissionDuration)).wait();
 
   // Give alice a locked position so the dashboard has something to render.
   const stakeAmount = ethers.parseEther("1000");
