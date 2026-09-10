@@ -196,7 +196,7 @@ function BoostCalculator() {
 
 function Hero() {
   return (
-    <Section className="!py-24 md:!py-36 lg:!py-44 overflow-hidden">
+    <Section className="!pt-14 md:!pt-20 lg:!pt-24 !pb-20 md:!pb-28 overflow-hidden">
       <div
         className="pointer-events-none absolute inset-0"
         aria-hidden
@@ -205,7 +205,6 @@ function Hero() {
             "radial-gradient(58% 50% at 76% 6%, rgba(16,185,129,0.10), transparent 70%)",
         }}
       />
-      <GridMotif className="-top-6 right-0 hidden lg:block" cols={7} rows={3} size={48} />
       <div className="relative grid lg:grid-cols-[1.05fr_0.95fr] gap-14 lg:gap-20 items-center">
         <div>
           <Eyebrow>Robinhood Chain · 4663</Eyebrow>
