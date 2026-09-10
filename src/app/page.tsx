@@ -8,6 +8,7 @@ import {
   Search, Bell, ArrowUpRight, ArrowDownRight, ChevronDown
 } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
+import DocsSection from "./_components/DocsSection";
 
 const STOCKS = [
   { 
@@ -198,7 +199,14 @@ export default function Home() {
               <Settings size={18} className="flex-shrink-0" />
               <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-xs font-medium whitespace-nowrap overflow-hidden">Settings</span>
             </button>
-            <button className="w-full flex items-center space-x-3 p-2.5 rounded-xl hover:bg-[#1F2228] text-gray-400 hover:text-white transition">
+            <button
+              onClick={() => setActiveSection("docs")}
+              className={`w-full flex items-center space-x-3 p-2.5 rounded-xl transition ${
+                activeSection === "docs"
+                  ? "bg-[#10B981] text-black font-bold shadow-md"
+                  : "hover:bg-[#1F2228] text-gray-400 hover:text-white"
+              }`}
+            >
               <HelpCircle size={18} className="flex-shrink-0" />
               <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-xs font-medium whitespace-nowrap overflow-hidden">Docs</span>
             </button>
@@ -578,7 +586,9 @@ export default function Home() {
               </div>
             )}
 
-            {!["pools", "stakes", "positions", "vaults"].includes(activeSection) && (
+            {activeSection === "docs" && <DocsSection />}
+
+            {!["pools", "stakes", "positions", "vaults", "docs"].includes(activeSection) && (
               <div className="h-full flex flex-col items-center justify-center bg-[#1B1E24] border border-[#232730] rounded-2xl p-8 text-center min-h-[400px]">
                 <div className="w-12 h-12 bg-[#10B981]/10 border border-[#10B981]/30 text-[#10B981] rounded-2xl flex items-center justify-center mb-3">
                   {NAV_ITEMS.find((n) => n.id === activeSection)?.icon && (
