@@ -103,13 +103,13 @@ function Overview() {
     <>
       <H>What DIVS is</H>
       <P>
-        DIVS is a protocol for trading tokenized stocks on-chain, 24/7. Every trade pays a fee, and
-        those fees are distributed to people who stake the protocol&apos;s own token rather than
-        being retained as broker profit.
+        Apple trades here at 3am. So does gold, and the S&amp;P. Seventeen markets, no market hours,
+        no broker in the middle.
       </P>
       <P>
-        Two assets play two different roles, and conflating them is the most common
-        misunderstanding:
+        Every fill pays a fee. That fee is not revenue the protocol keeps - it goes to whoever is
+        staking $DIVS when the trade lands. Two assets, two jobs, and confusing them is the common
+        mistake:
       </P>
       <Table
         head={["Asset", "Role", "Do you stake it?"]}
@@ -120,8 +120,7 @@ function Overview() {
         ]}
       />
       <P>
-        Holding $DIVS in your wallet earns nothing. Revenue accrues to <em>staked</em> positions
-        only.
+        Holding $DIVS earns nothing. Only <em>staked</em> positions carry weight.
       </P>
 
     </>
@@ -133,9 +132,8 @@ function Staking() {
     <>
       <H>Staking, step by step</H>
       <P>
-        Two pools exist. Pool ids are assigned in the order pools are added at deployment; the
-        intended configuration is single-sided $DIVS as pool <C>0</C> and DIVS/WETH LP as pool{" "}
-        <C>1</C>.
+        Two pools. Single-sided $DIVS is pool <C>0</C>, DIVS/WETH LP is pool <C>1</C>. Ids follow
+        the order the pools were added.
       </P>
       <Pre>{`// 1. approve the staking contract to pull your tokens
 divs.approve(stakingAddress, amount)
@@ -188,23 +186,22 @@ staking.unstake(poolId, amount)`}</Pre>
       />
 
       <Note>
-        Partial unstaking is supported - pass any amount up to your position. Rewards accrued so far
-        are settled before the withdrawal, so you never lose earnings by exiting.
+        Partial exits work - pass any amount up to your position. Rewards settle before the
+        withdrawal, so leaving never costs you what you already earned.
       </Note>
 
       <H>Adding to a locked position</H>
       <P>
-        Staking more into a position that is still locked requires a <C>lockWeeks</C> that ends no
-        earlier than your existing lock. Passing <C>0</C> while locked reverts. This prevents a top
-        -up from silently shortening a commitment you already made.
+        Adding to a locked position needs a <C>lockWeeks</C> ending no earlier than the lock you
+        already have. Passing <C>0</C> while locked reverts. A top-up cannot quietly shorten a
+        commitment.
       </P>
 
       <H>When a lock expires</H>
       <P>
-        Your boost does not disappear on its own. It drops to 1x the next time the position is
-        touched, or when anyone calls <C>poke(poolId, user)</C>. That function is permissionless by
-        design: a staker has no reason to demote themselves, and an expired boost would otherwise
-        keep diluting everyone still locked.
+        Nothing happens automatically. The boost falls to 1x the next time the position is touched,
+        or when anyone calls <C>poke(poolId, user)</C>. Permissionless on purpose: nobody demotes
+        their own stake, and an expired boost dilutes everyone still locked.
       </P>
     </>
   );
@@ -215,8 +212,7 @@ function Weight() {
     <>
       <H>How your share is calculated</H>
       <P>
-        Fees are split by weight, not by headcount and not purely by size. Weight is your staked
-        amount scaled by three independent multipliers:
+        Fees split by weight. Not evenly, and not by size alone. Three multipliers set yours:
       </P>
       <Pre>{`weight = amount × poolMultiplier × tierMultiplier × lockMultiplier`}</Pre>
       <Table
@@ -243,7 +239,7 @@ function Weight() {
 
       <H>Lock multiplier</H>
       <P>
-        Scales linearly from 1x to 4x across a 52-week maximum, computed on-chain as{" "}
+        1x flexible. 4x at 52 weeks. Linear between, computed on-chain as{" "}
         <C>10000 + 30000 × weeks / 52</C> in basis points:
       </P>
       <Table
@@ -260,8 +256,7 @@ function Weight() {
 
       <H>Worked example</H>
       <P>
-        Two stakers, identical principal, different commitment. Both in the single-sided pool at 1x,
-        no tier reached:
+        Same money, different commitment. Both single-sided at 1x, neither above a tier:
       </P>
       <Pre>{`Alice - 1,000 DIVS locked 52 weeks
   weight = 1,000 × 1.0 × 1.0 × 4.0 = 4,000
@@ -275,8 +270,8 @@ A 10 WETH fee arrives:
   Alice  4,000 / 5,000 × 10 = 8 WETH
   Bob    1,000 / 5,000 × 10 = 2 WETH`}</Pre>
       <P>
-        Same capital, four times the share, in exchange for giving up access to it for a year. You
-        can inspect any position&apos;s live weight with <C>currentWeight(poolId, user)</C>.
+        Four times the share for the same capital. The price is a year without access to it.{" "}
+        <C>currentWeight(poolId, user)</C> returns any position&apos;s live weight.
       </P>
     </>
   );
@@ -287,35 +282,32 @@ function Fees() {
     <>
       <H>Where fees come from</H>
       <P>
-        Every buy and sell on the launchpad pays a transaction fee. Buy-side fees arrive
-        denominated in the traded stock token and are swapped to WETH upstream; sell-side fees
-        arrive as WETH already. The staking contract therefore only ever handles WETH, and holds no
-        long tail of illiquid token dust.
+        Every buy and sell pays a fee. Buy-side fees arrive as the traded token and are swapped to
+        WETH upstream. Sell-side fees arrive as WETH already. The vault handles one asset, never a
+        long tail of dust.
       </P>
 
       <H>How they are distributed</H>
       <P>
-        Distribution uses a single accumulator. When fees arrive, the contract raises a global
-        &ldquo;WETH per unit of weight&rdquo; figure; your claim is that figure applied to your
-        weight, minus what you have already been credited.
+        One accumulator does the work. Fees arrive, the contract raises a global WETH-per-weight
+        figure, and your claim is that figure against your weight, minus what you have been credited
+        already.
       </P>
       <Pre>{`accWethPerWeight += amount / totalWeight     // on each fee
 claim = weight × accWethPerWeight − debt     // your entitlement`}</Pre>
       <P>
-        The consequence worth understanding: you earn from fees that arrive <em>while</em> you are
-        staked. Staking after a fee lands gives you no claim on it, and unstaking does not forfeit
-        what you already accrued.
+        The consequence: you earn from fees that land <em>while</em> you are staked. Arrive late and
+        you have no claim on what came before. Leave, and what you accrued is still yours.
       </P>
 
       <H>Solvency</H>
       <P>
-        <C>notifyFee</C> transfers the WETH into the contract <em>before</em> raising the
-        accumulator. The contract cannot distribute revenue it does not hold - this is enforced by
-        ordering in the code, not by policy or by an off-chain process.
+        <C>notifyFee</C> moves the WETH in <em>first</em>, then raises the accumulator. The contract
+        cannot promise revenue it is not holding. That is ordering in the code, not a policy.
       </P>
       <P>
-        Fees that arrive while nothing is staked are held in <C>unallocatedFees</C> and folded into
-        the next distribution rather than being divided by zero or stranded.
+        Fees arriving with nothing staked sit in <C>unallocatedFees</C> and fold into the next
+        distribution. Nothing divided by zero, nothing stranded.
       </P>
       <Note>
         <C>notifyFee</C> is permissionless. Because the WETH is pulled from the caller first, an
@@ -330,22 +322,20 @@ function Emissions() {
     <>
       <H>What emissions are</H>
       <P>
-        $DIVS paid to stakers on top of fee revenue, to attract liquidity early while trading volume
-        is still building. Emissions are an incentive funded from treasury - they are not revenue,
-        and unlike fees they are not sustainable indefinitely.
+        $DIVS paid on top of the fees, to attract stake before volume arrives. Funded from treasury,
+        not earned. Fees are revenue; emissions are spend. They end.
       </P>
 
       <H>How periods work</H>
       <P>
-        Funding defines the rate, not the other way around. <C>notifyEmission(amount, duration)</C>{" "}
-        pulls the DIVS in and derives the per-second rate from what actually arrived:
+        Funding sets the rate, never the reverse. <C>notifyEmission(amount, duration)</C> pulls the
+        DIVS in and derives the per-second rate from what arrived:
       </P>
       <Pre>{`rate = (amount + unspentRemainder) / duration
 periodFinish = now + duration`}</Pre>
       <P>
-        Accrual stops at <C>periodFinish</C> unless a new period is funded. The contract cannot
-        promise emissions it is not holding, so there is no scenario where stakers accrue claims
-        that nobody can pay, and no race to claim from a short pot.
+        Accrual stops at <C>periodFinish</C> unless a new period is funded. No claims nobody can
+        pay, and no race to empty a short pot.
       </P>
       <Table
         head={["Situation", "Behaviour"]}
@@ -362,10 +352,9 @@ periodFinish = now + duration`}</Pre>
 
       <H>Why principal is safe</H>
       <P>
-        $DIVS is both a staked asset and an emitted asset, which means a careless implementation
-        would pay emissions out of somebody else&apos;s deposit. The contract tracks{" "}
-        <C>emissionsFunded</C> separately from <C>totalStakedDivs</C>, and only explicitly funded
-        DIVS can ever be scheduled as emissions.
+        $DIVS is staked <em>and</em> emitted. Written carelessly, an emission pays out of someone
+        else&apos;s deposit. <C>emissionsFunded</C> is tracked apart from <C>totalStakedDivs</C>, and
+        only funded DIVS can be scheduled.
       </P>
     </>
   );
@@ -461,8 +450,8 @@ function Risks() {
     <>
       <H>Design risks</H>
       <P>
-        These follow from how the protocol works, not from its current state. They do not go away
-        once things are live.
+        These come from how the protocol works, not from where it is today. Going live does not
+        remove them.
       </P>
       <Table
         head={["Risk", "Detail"]}
