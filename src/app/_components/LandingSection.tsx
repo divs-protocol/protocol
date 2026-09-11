@@ -217,9 +217,9 @@ function Hero() {
             users, not its shareholders.
           </h1>
           <p className="text-[13px] md:text-sm leading-relaxed text-gray-400 max-w-xl mb-12">
-            Trade tokenized stocks around the clock, on-chain. Every trade pays a fee - and instead
-            of that fee becoming a brokerage&apos;s profit, it is routed back to the people who stake
-            $DIVS. Lock longer, take a bigger share.
+            Buy Apple at 3am. Sell gold on a Sunday. Every fill pays a fee, and that fee does not
+            become a brokerage&apos;s profit - it goes to whoever is staking $DIVS when the trade
+            lands. Lock longer, take a bigger cut.
           </p>
 
           <div className="flex flex-wrap items-center gap-3 mb-20">
@@ -266,8 +266,8 @@ function TwoRoles() {
     <Section className="border-t border-[#1F2228]">
       <Title>Two assets. Two jobs.</Title>
       <Lede>
-        The most common misunderstanding is that you stake the stocks. You do not. Stock tokens are
-        what gets traded; $DIVS is what earns from that trading.
+        You do not stake the stocks. Stock tokens are what gets traded. $DIVS is what earns from the
+        trading.
       </Lede>
 
       <div className="grid md:grid-cols-2 gap-4 mt-8">
@@ -279,8 +279,8 @@ function TwoRoles() {
             Buy the stock. Any hour.
           </h3>
           <p className="text-[11px] leading-relaxed text-gray-400 mb-4">
-            Tokenized equity exposure that settles on-chain in seconds, wallet to wallet. No market
-            hours, no clearinghouse, no broker between you and the position.
+            Equity exposure that settles in seconds, wallet to wallet. No market hours. No
+            clearinghouse. Nobody between you and the position.
           </p>
           <DataRow label="Settlement" value="on-chain, instant" />
           <DataRow label="Trading window" value="24 / 7" />
@@ -295,8 +295,8 @@ function TwoRoles() {
             Own the fees. Nothing else.
           </h3>
           <p className="text-[11px] leading-relaxed text-gray-400 mb-4">
-            Stake $DIVS single-sided, or DIVS/WETH LP for a higher weight. You collect a share of
-            every fee the platform charges, for as long as you are staked.
+            Stake $DIVS on its own, or DIVS/WETH LP for more weight. You take a cut of every fee the
+            platform charges, for as long as you stay staked.
           </p>
           <DataRow label="Paid in" value="WETH" />
           <DataRow label="Boost" value="up to 4x" />
@@ -315,15 +315,15 @@ function HowItWorks() {
   const steps = [
     [
       "Trade",
-      "Someone buys or sells a tokenized stock on the platform. The trade executes on-chain and settles immediately.",
+      "Someone buys or sells. It executes on-chain and settles immediately - no T+2, no clearing house.",
     ],
     [
       "Collect",
-      "The trade pays a fee. Buy-side fees arrive as the traded token and are swapped to WETH, so the vault holds one clean asset instead of a long tail of dust.",
+      "The fee is taken once, at execution. Buy-side fees arrive as the traded token and are swapped to WETH upstream, so the vault holds one asset and never a long tail of dust.",
     ],
     [
       "Distribute",
-      "The WETH is pushed to the staking contract and split across every staked position by weight. You claim whenever you like.",
+      "The WETH lands in the staking contract and splits across every staked position by weight. Claim it whenever you like.",
     ],
   ];
 
@@ -364,9 +364,8 @@ function Weighting() {
         <div>
           <Title>Commitment is the multiplier.</Title>
           <Lede>
-            Fees are split by weight, not by headcount and not purely by size. Three independent
-            multipliers decide yours - which pool you are in, how large the position is, and how long
-            you have locked it.
+            Fees split by weight. Not evenly, and not by size alone. Three multipliers set yours:
+            which pool, how large, and how long you locked it.
           </Lede>
 
           <div className="bg-[#101216] border border-[#232730] rounded-xl p-4 mt-6 mb-6 overflow-x-auto">
@@ -379,9 +378,9 @@ function Weighting() {
           </div>
 
           <p className="text-[11px] leading-relaxed text-gray-400">
-            The lock component scales linearly to a hard ceiling of 4x at one year. It is not a
-            promise of yield - it is a claim on whatever the platform actually earns, sized by how
-            long you are willing to leave your stake in place.
+            The lock scales linearly to a hard ceiling of 4x at one year. It promises no yield. It is
+            a claim on whatever the platform actually earns, sized by how long you leave your stake
+            alone.
           </p>
         </div>
 
@@ -424,8 +423,8 @@ function FeeFlow() {
     <Section className="border-t border-[#1F2228]">
       <Title>Fees don&apos;t sit. They circulate.</Title>
       <Lede>
-        Every trade on the platform pays a fee, and the treasury routes it straight back on-chain to
-        the people staking behind it.
+        Every trade pays a fee. The treasury routes it straight back on-chain, to the people staking
+        behind it.
       </Lede>
 
       <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 mt-8">
@@ -473,7 +472,7 @@ function Utility() {
         <Lede>
           The token behind the exchange. One idea:{" "}
           <span className="text-white font-semibold">
-            every trade on the platform pays the people staking it.
+            every trade pays the people staking it.
           </span>
         </Lede>
 
@@ -497,17 +496,17 @@ function Utility() {
             [
               "EARN",
               "Every trade pays you",
-              "Stake $DIVS and take a share of the fees from every buy and sell on the platform, paid in WETH.",
+              "Take a cut of the fee from every buy and sell on the platform, paid in WETH.",
             ],
             [
               "BOOST",
               "Lock for a bigger share",
-              "Commit for up to a year and carry as much as 4x the weight of the same stake left flexible.",
+              "Commit for a year and carry 4x the weight of the same stake left flexible.",
             ],
             [
               "PROVIDE",
               "Deepen the pool",
-              "Stake DIVS/WETH LP instead for a higher pool multiplier, on top of whatever the pair earns.",
+              "Stake the LP instead for a higher pool multiplier, on top of what the pair already earns.",
             ],
           ].map(([tag, title, body]) => (
             <div key={tag} className="bg-[#14161B] border border-[#232730] rounded-2xl p-5">
