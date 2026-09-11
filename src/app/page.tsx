@@ -14,6 +14,7 @@ import LandingSection from "./_components/LandingSection";
 import MarketsSection from "./_components/MarketsSection";
 import TradeSection from "./_components/TradeSection";
 import AnalyticsSection from "./_components/AnalyticsSection";
+import ExchangeSection from "./_components/ExchangeSection";
 import StakeSection from "./_components/StakeSection";
 import ConnectPrompt from "./_components/ConnectPrompt";
 import Footer from "./_components/Footer";
@@ -265,6 +266,14 @@ export default function Home() {
                 }`}
               >
                 Analytics
+              </button>
+              <button
+                onClick={() => setActiveSection("exchange")}
+                className={`transition ${
+                  activeSection === "exchange" ? "text-[#10B981]" : "text-gray-400 hover:text-white"
+                }`}
+              >
+                Exchange
               </button>
             </div>
 
@@ -575,9 +584,11 @@ export default function Home() {
 
             {activeSection === "analytics" && <AnalyticsSection />}
 
+            {activeSection === "exchange" && <ExchangeSection />}
+
             {activeSection === "docs" && <DocsSection />}
 
-            {!["protocol", "markets", "trade", "analytics", "pools", "stakes", "positions", "docs"].includes(activeSection) && (
+            {!["protocol", "markets", "trade", "analytics", "exchange", "pools", "stakes", "positions", "docs"].includes(activeSection) && (
               <div className="h-full flex flex-col items-center justify-center bg-[#1B1E24] border border-[#232730] rounded-2xl p-8 text-center min-h-[400px]">
                 <div className="w-12 h-12 bg-[#10B981]/10 border border-[#10B981]/30 text-[#10B981] rounded-2xl flex items-center justify-center mb-3">
                   {NAV_ITEMS.find((n) => n.id === activeSection)?.icon && (

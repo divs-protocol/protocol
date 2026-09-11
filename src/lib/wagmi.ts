@@ -1,5 +1,5 @@
 import { createConfig, http } from "wagmi";
-import { hardhat, mainnet, sepolia } from "wagmi/chains";
+import { hardhat, robinhood } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
 
 /**
@@ -25,20 +25,29 @@ const sharedOptions = {
   ssr: true,
 } as const;
 
+/**
+ * The protocol lives on Robinhood Chain, where the stock tokens are issued.
+ * Ethereum mainnet and Sepolia were create-next-app defaults and nothing in the
+ * app is deployed to them.
+ */
+const robinhoodRpcUrl = process.env.NEXT_PUBLIC_ROBINHOOD_RPC_URL;
+
 const remoteTransports = {
-  [mainnet.id]: http(),
-  [sepolia.id]: http(),
+  // Passing an explicit `undefined` url is not the same as omitting it - the
+  // transport is built with no endpoint instead of falling back to the chain's
+  // default RPC, and reads then fail without ever hitting the network.
+  [robinhood.id]: robinhoodRpcUrl ? http(robinhoodRpcUrl) : http(),
 } as const;
 
 export const config = includeLocalChain
   ? createConfig({
       ...sharedOptions,
-      chains: [mainnet, sepolia, hardhat],
+      chains: [robinhood, hardhat],
       transports: { ...remoteTransports, [hardhat.id]: http(localRpcUrl) },
     })
   : createConfig({
       ...sharedOptions,
-      chains: [mainnet, sepolia],
+      chains: [robinhood],
       transports: remoteTransports,
     });
 
