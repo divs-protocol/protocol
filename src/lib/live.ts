@@ -250,21 +250,31 @@ export function useMarketHistory(ticker: string | undefined, span: HistorySpan =
 
 /* ---------------- depth ---------------- */
 
-export type DepthLevel = { price: number; shares: number; value: number; cum: number };
+export type DepthLevel = { price: number; size: number; value: number; cum: number };
+export type Book = {
+  bids: DepthLevel[];
+  asks: DepthLevel[];
+  mid: number;
+  spread: number;
+  spreadPct: number;
+  decimals: number;
+};
+
+const EMPTY_BOOK: Book = { bids: [], asks: [], mid: 0, spread: 0, spreadPct: 0, decimals: 2 };
 
 /**
- * Real depth from the pool's own curve.
+ * Depth from the pool's own curve.
  *
- * A concentrated-liquidity pool has no order book, but it does have an exact
- * answer to "what does it cost to move the price to X": within the active
- * range, quantities follow from L and the square-root price. Walking outwards
- * from spot gives the same information an order book carries, computed rather
- * than invented.
+ * A concentrated-liquidity pool keeps no order book, but it answers the same
+ * question exactly: within the active range, the quantity needed to move the
+ * price follows from L and the square-root price.
  *
  *   Δshares = L · (1/√Pa − 1/√Pb)      Δweth = L · (√Pb − √Pa)
  *
- * Liquidity outside the current tick range differs, so this describes the book
- * near spot - which is the part that sets the price of an ordinary trade.
+ * Levels step by the pool's own fee, starting half a fee from mid, so the
+ * innermost spread is the real cost of a round trip rather than a chosen
+ * number. Liquidity outside the current tick range differs, so this describes
+ * the book near spot - the part that prices an ordinary trade.
  */
 export function poolDepth(
   m: Market,
@@ -272,105 +282,159 @@ export function poolDepth(
   liquidity: bigint,
   ethUsd: number,
   levels = 11,
-  stepBps = 5,
-): { bids: DepthLevel[]; asks: DepthLevel[]; spot: number } {
+): Book {
   const spot = wethPerShare(m, sqrtPriceX96) * ethUsd;
-  if (!sqrtPriceX96 || !liquidity || !spot) return { bids: [], asks: [], spot: 0 };
+  if (!sqrtPriceX96 || !liquidity || !spot) return EMPTY_BOOK;
 
   const L = Number(liquidity);
   const sqrtP = Number(sqrtPriceX96) / 2 ** 96;
+  // feeBps is in hundredths of a basis point, as Uniswap stores it.
+  const feeBpsReal = m.feeBps / 100;
 
-  // slot0 prices token1 in token0. Share price moves the opposite way to the
-  // pool price when WETH is token0, so the direction of a "bid" flips with
-  // orientation.
-  const build = (sign: number) => {
+  const build = (sign: 1 | -1) => {
     const out: DepthLevel[] = [];
     let cum = 0;
-    for (let i = 1; i <= levels; i += 1) {
-      const move = 1 + (sign * i * stepBps) / 10_000;
+
+    for (let i = 0; i < levels; i += 1) {
+      const offsetBps = feeBpsReal / 2 + i * feeBpsReal;
+      const move = 1 + (sign * offsetBps) / 10_000;
       const price = spot * move;
-      // Pool price ratio for the same move, in the pool's own orientation.
+
+      // slot0 prices token1 in token0, so a rise in the share price is a fall
+      // in the pool price when WETH is token0.
       const ratio = m.wethIsToken0 ? 1 / move : move;
       const sqrtTarget = sqrtP * Math.sqrt(ratio);
       const lo = Math.min(sqrtP, sqrtTarget);
       const hi = Math.max(sqrtP, sqrtTarget);
-      if (!lo || !hi) continue;
+      if (!lo || !hi || !Number.isFinite(lo) || !Number.isFinite(hi)) continue;
 
       const dWeth = (L * (hi - lo)) / 1e18;
       const dShares = (L * (1 / lo - 1 / hi)) / 1e18;
       const shares = m.wethIsToken0 ? dShares : dWeth;
       if (!Number.isFinite(shares) || shares <= 0) continue;
 
-      const stepShares = shares - cum;
+      const size = shares - cum;
       cum = shares;
-      out.push({
-        price,
-        shares: stepShares,
-        value: stepShares * price,
-        cum: shares,
-      });
+      out.push({ price, size, value: size * price, cum: shares });
     }
     return out;
   };
 
-  return { bids: build(-1), asks: build(1), spot };
+  const bids = build(-1);
+  const asks = build(1);
+  if (!bids.length || !asks.length) return EMPTY_BOOK;
+
+  const spread = asks[0].price - bids[0].price;
+  return {
+    bids,
+    asks,
+    mid: spot,
+    spread,
+    spreadPct: spot ? (spread / spot) * 100 : 0,
+    decimals: spot >= 100 ? 2 : spot >= 1 ? 3 : 4,
+  };
 }
 
 /** Depth for one market, from the pool state carried in the snapshot. */
-export function useDepth(m: LiveMarket | undefined, ethUsd: number, levels = 11) {
+export function useDepth(m: LiveMarket | undefined, ethUsd: number, levels = 11): Book {
   return useMemo(() => {
-    if (!m || !m.sqrtPriceX96) return { bids: [], asks: [], spot: 0 };
+    if (!m || !m.sqrtPriceX96) return EMPTY_BOOK;
     return poolDepth(m, m.sqrtPriceX96, m.liquidity, ethUsd, levels);
   }, [m, ethUsd, levels]);
 }
 
 /* ---------------- protocol aggregates ---------------- */
 
-export type ProtocolStats = {
-  volume: number;
-  fees: number;
-  tvl: number;
-  txns: number;
-  buys: number;
-  sells: number;
-  markets: number;
-  /** Markets ordered by the fees they produced in the window. */
-  byFees: { ticker: string; name: string; fees: number; share: number }[];
-  window: string;
-  loading: boolean;
-};
+export type FeeBucket = { t: number; fees: number; volume: number };
 
-/** Exchange-wide totals, summed from the same read the index uses. */
-export function useProtocolStats(): ProtocolStats & { markets_: LiveMarket[] } {
+/**
+ * Exchange-wide totals, summed from the same snapshot the index uses.
+ *
+ * `byFees` is where fee revenue came from over the window, which is the
+ * question the analytics page exists to answer.
+ */
+export function useProtocolStats() {
   const { markets, window, loading } = useLiveMarkets();
 
   return useMemo(() => {
     const volume = markets.reduce((s, m) => s + m.volume, 0);
     const fees = markets.reduce((s, m) => s + m.fees, 0);
-    const byFees = markets
-      .slice()
-      .sort((a, b) => b.fees - a.fees)
-      .map((m) => ({
-        ticker: m.ticker,
-        name: m.name,
-        fees: m.fees,
-        share: fees ? m.fees / fees : 0,
-      }));
 
     return {
+      markets,
       volume,
       fees,
       tvl: markets.reduce((s, m) => s + m.tvl, 0),
       txns: markets.reduce((s, m) => s + m.txns, 0),
       buys: markets.reduce((s, m) => s + m.buys, 0),
       sells: markets.reduce((s, m) => s + m.sells, 0),
-      markets: markets.filter((m) => m.txns > 0).length,
-      byFees,
+      active: markets.filter((m) => m.txns > 0).length,
+      byFees: markets
+        .slice()
+        .sort((a, b) => b.fees - a.fees)
+        .map((m) => ({
+          ticker: m.ticker,
+          name: m.name,
+          fees: m.fees,
+          volume: m.volume,
+          share: fees ? m.fees / fees : 0,
+        })),
       window,
       loading,
-      markets_: markets,
     };
   }, [markets, window, loading]);
+}
+
+/* ---------------- staking ---------------- */
+
+export type StakingSnapshot = {
+  deployed: boolean;
+  address: string | null;
+  totalStakedDivs: number;
+  totalWeight: number;
+  emissionsFunded: number;
+  emissionsAccrued: number;
+  emissionRate: number;
+  periodFinish: number;
+  accWethPerWeight: number;
+  unallocatedFees: number;
+};
+
+/**
+ * Protocol staking totals.
+ *
+ * `deployed` is the answer to `eth_getCode` at the configured address, not a
+ * flag someone set: until DivsStaking is on chain there is nothing to report,
+ * and the panels that consume this render empty instead of guessing.
+ */
+export function useStaking(refreshMs = 15_000) {
+  const [snapshot, setSnapshot] = useState<StakingSnapshot | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const read = async () => {
+      try {
+        const response = await fetch("/api/staking");
+        const body = await response.json();
+        if (!cancelled && response.ok) setSnapshot(body as StakingSnapshot);
+      } catch {
+        /* leave the last good snapshot in place */
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    read();
+    const id = setInterval(read, refreshMs);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [refreshMs]);
+
+  return { staking: snapshot, loading };
 }
 
 /** Ticks a counter so "12m ago" ages without recomputing during render. */

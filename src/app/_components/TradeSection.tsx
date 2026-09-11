@@ -3,29 +3,34 @@
 import { useMemo, useState } from "react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
 import { Search } from "lucide-react";
+import { useAccount } from "wagmi";
 import {
-  MARKETS,
-  type Market,
-  type Timeframe,
-  type OrderType,
-  type BookLevel,
-  TIMEFRAMES,
-  priceSeries,
-  orderBook,
-  openOrders,
-  transactions,
-  usd,
-  num,
+  HISTORY_SPANS,
+  type DepthLevel,
+  type HistorySpan,
+  type LiveMarket,
   ago,
-} from "@/lib/markets";
+  num,
+  usd,
+  useDepth,
+  useLiveMarkets,
+  useMarketHistory,
+} from "@/lib/live";
+import ConnectPrompt from "./ConnectPrompt";
 import Footer from "./Footer";
+
+type OrderType = "limit" | "market" | "stop";
 
 /**
  * Trade - the order-entry terminal.
  *
  * Distinct from a token page: that answers "what is this market doing", this
- * answers "how do I get filled". Market list, chart, depth of book, order entry
- * with limit/market/stop, and your working orders.
+ * answers "how do I get filled". Market list, chart, depth of book, order
+ * entry, and the fills belonging to the connected wallet.
+ *
+ * Depth is computed from the pool's liquidity rather than quoted by anyone -
+ * there is no resting order to show, but the quantity that moves the price a
+ * given distance is exact, and that is what a book communicates.
  */
 
 function Panel({
@@ -53,17 +58,23 @@ function Panel({
 /* ---------- market selector ---------- */
 
 function MarketList({
+  markets,
   active,
   onSelect,
 }: {
-  active: Market;
-  onSelect: (m: Market) => void;
+  markets: LiveMarket[];
+  active: LiveMarket | undefined;
+  onSelect: (m: LiveMarket) => void;
 }) {
   const [q, setQ] = useState("");
   const list = useMemo(() => {
     const t = q.trim().toLowerCase();
-    return t ? MARKETS.filter((m) => m.ticker.toLowerCase().includes(t) || m.name.toLowerCase().includes(t)) : MARKETS;
-  }, [q]);
+    return t
+      ? markets.filter(
+          (m) => m.ticker.toLowerCase().includes(t) || m.name.toLowerCase().includes(t),
+        )
+      : markets;
+  }, [markets, q]);
 
   return (
     <Panel title="Markets" className="lg:h-[560px]">
@@ -80,8 +91,8 @@ function MarketList({
       </div>
       <div className="overflow-y-auto scrollbar-none flex-1 min-h-0">
         {list.map((m) => {
-          const up = m.change24h >= 0;
-          const isActive = m.ticker === active.ticker;
+          const up = m.change >= 0;
+          const isActive = m.ticker === active?.ticker;
           return (
             <button
               key={m.ticker}
@@ -100,7 +111,7 @@ function MarketList({
                 <div className="font-mono text-[10px] text-gray-300">{usd(m.price)}</div>
                 <div className={`font-mono text-[9px] ${up ? "text-[#10B981]" : "text-red-400"}`}>
                   {up ? "+" : ""}
-                  {m.change24h.toFixed(2)}%
+                  {m.change.toFixed(2)}%
                 </div>
               </div>
             </button>
@@ -114,11 +125,11 @@ function MarketList({
 
 /* ---------- depth of book ---------- */
 
-function OrderBookPanel({ market, onPrice }: { market: Market; onPrice: (p: number) => void }) {
-  const book = useMemo(() => orderBook(market), [market]);
-  const maxCum = Math.max(book.bids[book.bids.length - 1].cum, book.asks[book.asks.length - 1].cum);
+function OrderBookPanel({ market, ethUsd, onPrice }: { market: LiveMarket; ethUsd: number; onPrice: (p: number) => void }) {
+  const book = useDepth(market, ethUsd);
+  const maxCum = Math.max(book.bids.at(-1)?.cum ?? 0, book.asks.at(-1)?.cum ?? 0) || 1;
 
-  const Row = ({ level, side }: { level: BookLevel; side: "bid" | "ask" }) => (
+  const Row = ({ level, side }: { level: DepthLevel; side: "bid" | "ask" }) => (
     <button
       onClick={() => onPrice(level.price)}
       className="relative w-full grid grid-cols-3 gap-2 px-3 py-[3px] text-[10px] font-mono hover:bg-[#14161B] transition"
@@ -138,7 +149,7 @@ function OrderBookPanel({ market, onPrice }: { market: Market; onPrice: (p: numb
 
   return (
     <Panel
-      title="Order book"
+      title="Depth"
       right={
         <span className="font-mono text-[10px] text-gray-500">
           spread {book.spread.toFixed(book.decimals)} · {book.spreadPct.toFixed(3)}%
@@ -173,7 +184,7 @@ function OrderBookPanel({ market, onPrice }: { market: Market; onPrice: (p: numb
 
 /* ---------- order entry ---------- */
 
-function OrderEntry({ market, price, setPrice }: { market: Market; price: string; setPrice: (v: string) => void }) {
+function OrderEntry({ market, price, setPrice }: { market: LiveMarket; price: string; setPrice: (v: string) => void }) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [type, setType] = useState<OrderType>("limit");
   const [amount, setAmount] = useState("10");
@@ -305,21 +316,45 @@ function OrderEntry({ market, price, setPrice }: { market: Market; price: string
 /* ---------- section ---------- */
 
 export default function TradeSection() {
-  const [market, setMarket] = useState<Market>(MARKETS[0]);
-  const [tf, setTf] = useState<Timeframe>("24H");
-  const [price, setPrice] = useState(MARKETS[0].price.toFixed(2));
-  const [tab, setTab] = useState<"orders" | "trades">("orders");
+  const { markets, ethUsd } = useLiveMarkets();
+  const { address, isConnected } = useAccount();
+  const [ticker, setTicker] = useState(markets[0]?.ticker ?? "AAPL");
+  const [tf, setTf] = useState<HistorySpan>("1h");
+  const [price, setPrice] = useState("");
+  const [tab, setTab] = useState<"mine" | "trades">("trades");
 
-  const series = useMemo(() => priceSeries(market, tf), [market, tf]);
-  const orders = useMemo(() => openOrders(market), [market]);
-  const fills = useMemo(() => transactions(market, 14), [market]);
+  const market = markets.find((m) => m.ticker === ticker) ?? markets[0];
+  const { candles, trades } = useMarketHistory(market?.ticker, tf);
 
-  const selectMarket = (m: Market) => {
-    setMarket(m);
+  const series = useMemo(
+    () =>
+      candles.map((c) => ({
+        t: new Date(c.t * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
+        price: c.price,
+      })),
+    [candles],
+  );
+
+  const fills = useMemo(() => trades.slice(0, 14), [trades]);
+
+  /*
+   * There are no resting orders on an AMM, so this tab shows the connected
+   * wallet's own fills - the swaps whose shares were delivered to it.
+   */
+  const mine = useMemo(
+    () =>
+      address
+        ? trades.filter((t) => t.account.toLowerCase() === address.toLowerCase())
+        : [],
+    [trades, address],
+  );
+
+  const selectMarket = (m: LiveMarket) => {
+    setTicker(m.ticker);
     setPrice(m.price.toFixed(2));
   };
 
-  const up = market.change24h >= 0;
+  const up = (market?.change ?? 0) >= 0;
   const stroke = up ? "#10B981" : "#F87171";
 
   return (
@@ -332,7 +367,7 @@ export default function TradeSection() {
       </div>
 
       <div className="grid lg:grid-cols-[210px_1fr_290px] gap-3 items-start">
-        <MarketList active={market} onSelect={selectMarket} />
+        <MarketList markets={markets} active={market} onSelect={selectMarket} />
 
         <Panel
           title={`${market.ticker} · ${usd(market.price)}`}
@@ -341,9 +376,9 @@ export default function TradeSection() {
             <div className="flex items-center gap-1">
               <span className={`font-mono text-[10px] mr-2 ${up ? "text-[#10B981]" : "text-red-400"}`}>
                 {up ? "+" : ""}
-                {market.change24h.toFixed(2)}%
+                {market.change.toFixed(2)}%
               </span>
-              {TIMEFRAMES.map((t) => (
+              {HISTORY_SPANS.map(({ label: t }) => (
                 <button
                   key={t}
                   onClick={() => setTf(t)}
@@ -395,7 +430,7 @@ export default function TradeSection() {
           <div className="flex items-center gap-1 px-3.5 py-2.5 border-b border-[#232730]">
             {(
               [
-                ["orders", "Your orders"],
+                ["mine", "Your fills"],
                 ["trades", "Recent trades"],
               ] as const
             ).map(([id, label]) => (
@@ -412,49 +447,48 @@ export default function TradeSection() {
           </div>
 
           <div className="overflow-x-auto">
-            {tab === "orders" ? (
-              <table className="w-full text-[11px] min-w-[620px]">
-                <thead>
-                  <tr className="text-[9px] uppercase tracking-wide text-gray-500 border-b border-[#232730]">
-                    <th className="px-3 py-2 text-left font-semibold">Side</th>
-                    <th className="px-3 py-2 text-left font-semibold">Type</th>
-                    <th className="px-3 py-2 text-right font-semibold">Price</th>
-                    <th className="px-3 py-2 text-right font-semibold">Amount</th>
-                    <th className="px-3 py-2 text-right font-semibold">Filled</th>
-                    <th className="px-3 py-2 text-right font-semibold">Status</th>
-                    <th className="px-3 py-2 text-right font-semibold">Age</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map((o) => (
-                    <tr key={o.id} className="border-b border-[#1F2228] last:border-0 hover:bg-[#14161B] transition">
-                      <td className={`px-3 py-2 font-semibold uppercase text-[10px] ${o.side === "buy" ? "text-[#10B981]" : "text-red-400"}`}>
-                        {o.side}
-                      </td>
-                      <td className="px-3 py-2 capitalize text-gray-400">{o.type}</td>
-                      <td className="px-3 py-2 text-right font-mono text-gray-300">{usd(o.price)}</td>
-                      <td className="px-3 py-2 text-right font-mono text-gray-300">{num(o.amount, 2)}</td>
-                      <td className="px-3 py-2 text-right font-mono text-gray-300">
-                        {((o.filled / o.amount) * 100).toFixed(0)}%
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <span
-                          className={`text-[9px] font-semibold uppercase tracking-wide ${
-                            o.status === "filled"
-                              ? "text-[#10B981]"
-                              : o.status === "partial"
-                                ? "text-amber-400"
-                                : "text-gray-400"
+            {tab === "mine" ? (
+              !isConnected ? (
+                <div className="p-6">
+                  <ConnectPrompt what="Your fills" />
+                </div>
+              ) : mine.length === 0 ? (
+                <div className="px-3 py-10 text-center text-[11px] text-gray-500">
+                  No fills for this wallet in {market?.ticker} over the last {tf}.
+                </div>
+              ) : (
+                <table className="w-full text-[11px] min-w-[420px]">
+                  <thead>
+                    <tr className="text-[9px] uppercase tracking-wide text-gray-500 border-b border-[#232730]">
+                      <th className="px-3 py-2 text-left font-semibold">Side</th>
+                      <th className="px-3 py-2 text-right font-semibold">Price</th>
+                      <th className="px-3 py-2 text-right font-semibold">Amount</th>
+                      <th className="px-3 py-2 text-right font-semibold">Value</th>
+                      <th className="px-3 py-2 text-right font-semibold">Age</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mine.map((t, i) => (
+                      <tr
+                        key={`${t.hash}-${i}`}
+                        className="border-b border-[#1F2228] last:border-0 hover:bg-[#14161B] transition"
+                      >
+                        <td
+                          className={`px-3 py-2 font-semibold uppercase text-[10px] ${
+                            t.side === "buy" ? "text-[#10B981]" : "text-red-400"
                           }`}
                         >
-                          {o.status}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-right font-mono text-gray-600">{ago(o.secondsAgo)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                          {t.side}
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono text-gray-300">{usd(t.price)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-gray-300">{num(t.shares, 4)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-white">{usd(t.value)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-gray-600">{ago(t.secondsAgo)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )
             ) : (
               <table className="w-full text-[11px] min-w-[420px]">
                 <thead>
@@ -466,13 +500,16 @@ export default function TradeSection() {
                   </tr>
                 </thead>
                 <tbody>
-                  {fills.map((f) => (
-                    <tr key={f.id} className="border-b border-[#1F2228] last:border-0 hover:bg-[#14161B] transition">
+                  {fills.map((f, i) => (
+                    <tr
+                      key={`${f.hash}-${i}`}
+                      className="border-b border-[#1F2228] last:border-0 hover:bg-[#14161B] transition"
+                    >
                       <td className={`px-3 py-2 font-semibold uppercase text-[10px] ${f.side === "buy" ? "text-[#10B981]" : "text-red-400"}`}>
                         {f.side}
                       </td>
                       <td className="px-3 py-2 text-right font-mono text-gray-300">{usd(f.price)}</td>
-                      <td className="px-3 py-2 text-right font-mono text-gray-300">{num(f.amount, 2)}</td>
+                      <td className="px-3 py-2 text-right font-mono text-gray-300">{num(f.shares, 4)}</td>
                       <td className="px-3 py-2 text-right font-mono text-gray-600">{ago(f.secondsAgo)}</td>
                     </tr>
                   ))}
@@ -482,7 +519,7 @@ export default function TradeSection() {
           </div>
         </div>
 
-        <OrderBookPanel market={market} onPrice={(p) => setPrice(p.toFixed(2))} />
+        <OrderBookPanel market={market} ethUsd={ethUsd} onPrice={(p) => setPrice(p.toFixed(2))} />
       </div>
 
       <Footer />
