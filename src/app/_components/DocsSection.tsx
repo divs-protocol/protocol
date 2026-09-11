@@ -9,7 +9,7 @@ import Footer from "./Footer";
  *
  * Structured as a field guide rather than a printed page: a contents rail that
  * follows the reader, numbered steps for anything sequential, spec rows for
- * anything referenced, and callouts for the rules that are easy to get wrong.
+ * anything referenced, and callouts for the rules that decide an outcome.
  *
  * Each topic carries an accent colour. Not decoration - it keys the rail, the
  * eyebrow and the step numerals together, so a reader scrolling always knows
@@ -155,7 +155,7 @@ const TOPICS: Topic[] = [
           staking $DIVS when the trade lands.
         </P>
         <H>Two assets, two jobs</H>
-        <P>Confusing them is the common mistake.</P>
+        <P>The stocks are what you trade. $DIVS is what you stake.</P>
         <Table
           head={["Asset", "Role", "Staked?"]}
           rows={[
@@ -360,9 +360,9 @@ periodFinish = now + duration`}</Pre>
           ]}
         />
         <Note accent={a} label="Principal is not the budget">
-          $DIVS is staked <em>and</em> emitted. Written carelessly, an emission pays out of someone
-          else&apos;s deposit. <C>emissionsFunded</C> is tracked apart from <C>totalStakedDivs</C>,
-          and only funded DIVS can be scheduled.
+          $DIVS is both staked and emitted, so the contract keeps the two apart.
+          <C>emissionsFunded</C> holds the reward budget, <C>totalStakedDivs</C> holds deposits, and
+          only funded DIVS can be scheduled. An emission can never be paid out of principal.
         </Note>
       </>
     ),
