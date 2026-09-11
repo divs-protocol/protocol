@@ -144,28 +144,30 @@ const TOPICS: Topic[] = [
   {
     id: "overview",
     label: "Overview",
-    eyebrow: "Start here",
-    title: "What DIVS is",
-    lead: "Apple trades here at 3am. So does gold, and the S&P. Seventeen markets, no market hours, no broker in the middle.",
+    eyebrow: "Introduction",
+    title: "Overview",
+    lead: "DIVS Protocol is an exchange for tokenized equities on Robinhood Chain. Fees charged on trades are distributed to staked $DIVS rather than retained by the protocol.",
     accent: ACCENTS.emerald,
     body: (a) => (
       <>
         <P>
-          Every fill pays a fee. That fee is not revenue the protocol keeps - it goes to whoever is
-          staking $DIVS when the trade lands.
+          Seventeen markets are live, covering individual equities, index ETFs and commodity ETFs.
+          They trade continuously: there are no market hours, and a trade settles against an
+          on-chain pool rather than through a broker.
         </P>
-        <H>Two assets, two jobs</H>
-        <P>The stocks are what you trade. $DIVS is what you stake.</P>
+        <H>Assets</H>
+        <P>Three assets appear in the protocol. Two of them can be staked.</P>
         <Table
           head={["Asset", "Role", "Staked?"]}
           rows={[
-            ["Tokenized stocks (NVDA, AAPL…)", "What gets traded", "No"],
+            ["Tokenized stocks (NVDA, AAPL…)", "Traded on the exchange", "No"],
             ["$DIVS", "Claim on fee revenue", "Yes"],
             ["DIVS/WETH LP", "Liquidity for the DIVS pair", "Yes"],
           ]}
         />
-        <Note accent={a} label="The one rule">
-          Holding $DIVS earns nothing. Only staked positions carry weight.
+        <Note accent={a} label="Eligibility">
+          Rewards accrue to staked positions only. An unstaked $DIVS balance carries no weight and
+          receives no distribution.
         </Note>
       </>
     ),
@@ -173,52 +175,62 @@ const TOPICS: Topic[] = [
   {
     id: "staking",
     label: "Staking",
-    eyebrow: "How to",
-    title: "Staking, step by step",
-    lead: "Two pools. Single-sided $DIVS is pool 0, DIVS/WETH LP is pool 1. Ids follow the order the pools were added.",
+    eyebrow: "Guide",
+    title: "Staking",
+    lead: "Two pools accept deposits. Single-sided $DIVS is pool 0 and the DIVS/WETH LP token is pool 1. Pool ids follow the order in which pools were added.",
     accent: ACCENTS.sky,
     body: (a) => (
       <>
         <div className="mb-8">
           <Step n={1} title="Approve" accent={a}>
-            Let the staking contract pull your tokens: <C>divs.approve(stakingAddress, amount)</C>.
+            Authorise the staking contract to transfer the deposit:{" "}
+            <C>divs.approve(stakingAddress, amount)</C>.
           </Step>
-          <Step n={2} title="Stake with a lock" accent={a}>
-            <C>stake(poolId, amount, lockWeeks)</C>. Zero weeks is flexible; 52 is the ceiling.
+          <Step n={2} title="Stake" accent={a}>
+            <C>stake(poolId, amount, lockWeeks)</C>. <C>lockWeeks</C> accepts 0 for a flexible
+            position, up to a maximum of 52.
           </Step>
-          <Step n={3} title="Watch it accrue" accent={a}>
-            <C>pendingRewards(you)</C> returns unclaimed WETH and DIVS, including what has accrued
-            since you last touched the position.
+          <Step n={3} title="Monitor accrual" accent={a}>
+            <C>pendingRewards(account)</C> returns unclaimed WETH and DIVS, including amounts
+            accrued since the position was last updated.
           </Step>
           <Step n={4} title="Claim" accent={a}>
-            <C>claim()</C> moves both. Your stake, lock and weight are untouched.
+            <C>claim()</C> transfers both assets. The deposit, lock and weight are unchanged.
           </Step>
-          <Step n={5} title="Exit" accent={a}>
-            <C>unstake(poolId, amount)</C>, once the lock has expired. Partial amounts work.
+          <Step n={5} title="Withdraw" accent={a}>
+            <C>unstake(poolId, amount)</C>, after the lock has expired. Partial withdrawals are
+            supported.
           </Step>
         </div>
 
-        <H>What each call refuses</H>
+        <H>Revert conditions</H>
         <Table
           head={["Call", "Reverts when"]}
           rows={[
-            [<C key="1">stake</C>, <>The new lock ends earlier than your current one, or <C>lockWeeks</C> is above 52.</>],
-            [<C key="2">extendLock</C>, <>The new end is not later than the current one.</>],
-            [<C key="3">unstake</C>, <>The lock has not expired, or the amount exceeds your position.</>],
-            [<C key="4">claim</C>, <>Never. Claiming zero is a no-op.</>],
+            [
+              <C key="1">stake</C>,
+              <>
+                The supplied lock ends earlier than the current lock, or <C>lockWeeks</C> exceeds 52.
+              </>,
+            ],
+            [<C key="2">extendLock</C>, <>The new end is not later than the current end.</>],
+            [<C key="3">unstake</C>, <>The lock has not expired, or the amount exceeds the position.</>],
+            [<C key="4">claim</C>, <>Does not revert. A claim of zero is a no-op.</>],
           ]}
         />
 
         <Note accent={a} label="Adding to a locked position">
-          A top-up needs a <C>lockWeeks</C> ending no earlier than the lock you already have.
-          Passing <C>0</C> while locked reverts, so a top-up cannot quietly shorten a commitment.
+          A deposit into a position that is already locked requires a <C>lockWeeks</C> value ending
+          no earlier than the existing lock. Passing <C>0</C> while locked reverts, so a deposit
+          cannot shorten an existing commitment.
         </Note>
 
-        <H>When a lock expires</H>
+        <H>Lock expiry</H>
         <P>
-          Nothing happens automatically. The boost falls to 1x the next time the position is
-          touched, or when anyone calls <C>poke(poolId, user)</C>. Permissionless on purpose:
-          nobody demotes their own stake, and an expired boost dilutes everyone still locked.
+          Weight is not reduced automatically when a lock ends. The lock multiplier falls to 1x the
+          next time the position is updated, or when <C>poke(poolId, account)</C> is called. Any
+          address may call <C>poke</C>, since an expired lock that retains its multiplier dilutes
+          the positions that are still locked.
         </P>
       </>
     ),
@@ -227,8 +239,8 @@ const TOPICS: Topic[] = [
     id: "weight",
     label: "Weight & multipliers",
     eyebrow: "Mechanism",
-    title: "Commitment is the multiplier",
-    lead: "Fees split by weight. Not evenly, and not by size alone. Three multipliers set yours.",
+    title: "Weight and multipliers",
+    lead: "A position receives a share of each distribution proportional to its weight. Weight is the staked amount multiplied by three independent multipliers.",
     accent: ACCENTS.violet,
     body: (a) => (
       <>
@@ -236,16 +248,20 @@ const TOPICS: Topic[] = [
         <Table
           head={["Multiplier", "Set by", "Range"]}
           rows={[
-            ["poolMultiplier", "Governance, per pool", <>Set at deployment · <TBD key="a" /></>],
-            ["tierMultiplier", "Position size vs thresholds", <>1x until a tier is reached · <TBD key="b" /></>],
-            ["lockMultiplier", "Your chosen lock", "1x flexible → 4x at 52 weeks"],
+            ["poolMultiplier", "Owner, per pool", <>Set at deployment · <TBD key="a" /></>],
+            [
+              "tierMultiplier",
+              "Position size against thresholds",
+              <>1x below the first tier · <TBD key="b" /></>,
+            ],
+            ["lockMultiplier", "Lock duration chosen at stake", "1x flexible to 4x at 52 weeks"],
           ]}
         />
 
-        <H>The lock curve</H>
+        <H>Lock multiplier</H>
         <P>
-          1x flexible. 4x at 52 weeks. Linear between, computed on-chain as{" "}
-          <C>10000 + 30000 × weeks / 52</C> in basis points.
+          The lock multiplier is 1x for a flexible position and 4x at 52 weeks, linear between the
+          two. It is computed on-chain as <C>10000 + 30000 × weeks / 52</C> basis points.
         </P>
         <div className="mb-5 rounded-xl border border-[#232730] overflow-hidden">
           {(
@@ -258,7 +274,10 @@ const TOPICS: Topic[] = [
               ["52 weeks", 4.0],
             ] as [string, number][]
           ).map(([label, mult]) => (
-            <div key={label} className="flex items-center gap-4 px-4 py-2.5 border-b border-[#1F2228] last:border-0">
+            <div
+              key={label}
+              className="flex items-center gap-4 px-4 py-2.5 border-b border-[#1F2228] last:border-0"
+            >
               <span className="text-[13px] text-gray-400 w-24 flex-shrink-0">{label}</span>
               <span className="flex-1 h-1.5 rounded-full bg-[#0E1013] overflow-hidden">
                 <span
@@ -273,8 +292,11 @@ const TOPICS: Topic[] = [
           ))}
         </div>
 
-        <H>Worked example</H>
-        <P>Same money, different commitment. Both single-sided at 1x, neither above a tier.</P>
+        <H>Example</H>
+        <P>
+          Two positions of equal size in pool 0, neither above a tier threshold, differing only in
+          lock duration.
+        </P>
         <Pre>{`Alice — 1,000 DIVS locked 52 weeks
   weight = 1,000 × 1.0 × 1.0 × 4.0 = 4,000
 
@@ -283,12 +305,11 @@ Bob   — 1,000 DIVS flexible
 
 totalWeight = 5,000
 
-A 10 WETH fee arrives:
+A 10 WETH fee is distributed:
   Alice  4,000 / 5,000 × 10 = 8 WETH
   Bob    1,000 / 5,000 × 10 = 2 WETH`}</Pre>
         <P>
-          Four times the share for the same capital. The price is a year without access to it.{" "}
-          <C>currentWeight(poolId, user)</C> returns any position&apos;s live weight.
+          <C>currentWeight(poolId, account)</C> returns the live weight of any position.
         </P>
       </>
     ),
@@ -297,35 +318,36 @@ A 10 WETH fee arrives:
     id: "fees",
     label: "Fee distribution",
     eyebrow: "Mechanism",
-    title: "Where the fees go",
-    lead: "Every buy and sell pays a fee. The vault handles one asset, never a long tail of dust.",
+    title: "Fee distribution",
+    lead: "Fees charged on trades are distributed to staked positions in WETH, in proportion to weight.",
     accent: ACCENTS.cyan,
     body: (a) => (
       <>
         <P>
-          Buy-side fees arrive as the traded token and are swapped to WETH upstream. Sell-side fees
-          arrive as WETH already.
+          Sell-side fees are collected in WETH. Buy-side fees are collected in the traded token and
+          swapped to WETH before reaching the staking contract, so distributions are single-asset.
         </P>
-        <H>How a claim is computed</H>
-        <Pre>{`accWethPerWeight += amount / totalWeight     // on each fee
-claim = weight × accWethPerWeight − debt     // your entitlement`}</Pre>
+        <H>Accounting</H>
+        <Pre>{`accWethPerWeight += amount / totalWeight     // on each distribution
+claim = weight × accWethPerWeight − debt     // entitlement of a position`}</Pre>
         <P>
-          The consequence: you earn from fees that land <em>while</em> you are staked. Arrive late
-          and you have no claim on what came before. Leave, and what you accrued is still yours.
+          A position earns from distributions that occur while it is staked. Fees distributed before
+          a deposit are not claimable by it, and rewards accrued before a withdrawal remain
+          claimable after it.
         </P>
 
-        <Note accent={a} label="Why it cannot overpay">
-          <C>notifyFee</C> moves the WETH in first, then raises the accumulator. The contract cannot
-          promise revenue it is not holding. That is ordering in the code, not a policy.
+        <Note accent={a} label="Order of operations">
+          <C>notifyFee</C> transfers the WETH into the contract before increasing the accumulator,
+          so the contract cannot record an entitlement it does not hold.
         </Note>
 
         <P>
-          Fees arriving with nothing staked sit in <C>unallocatedFees</C> and fold into the next
-          distribution. Nothing divided by zero, nothing stranded.
+          Fees that arrive while <C>totalWeight</C> is zero are held in <C>unallocatedFees</C> and
+          included in the next distribution.
         </P>
         <P>
-          <C>notifyFee</C> is permissionless. Because the WETH is pulled from the caller first, an
-          unauthorised caller can only donate, never divert.
+          <C>notifyFee</C> may be called by any address. The WETH is transferred from the caller, so
+          an unauthorised call can only add to the amount distributed.
         </P>
       </>
     ),
@@ -334,35 +356,36 @@ claim = weight × accWethPerWeight − debt     // your entitlement`}</Pre>
     id: "emissions",
     label: "Emissions",
     eyebrow: "Mechanism",
-    title: "Emissions are spend, not revenue",
-    lead: "$DIVS paid on top of the fees, to attract stake before volume arrives. Funded from treasury, not earned. They end.",
+    title: "Emissions",
+    lead: "$DIVS distributed in addition to fee revenue, funded from treasury and scheduled over a fixed period.",
     accent: ACCENTS.amber,
     body: (a) => (
       <>
-        <H>Funding sets the rate</H>
+        <H>Funding</H>
         <P>
-          Never the reverse. <C>notifyEmission(amount, duration)</C> pulls the DIVS in and derives
-          the per-second rate from what arrived.
+          <C>notifyEmission(amount, duration)</C> transfers the DIVS into the contract and derives
+          the per-second rate from the amount received. The rate is a function of the funding rather
+          than a separately configured parameter.
         </P>
         <Pre>{`rate = (amount + unspentRemainder) / duration
 periodFinish = now + duration`}</Pre>
         <P>
-          Accrual stops at <C>periodFinish</C> unless a new period is funded. No claims nobody can
-          pay, and no race to empty a short pot.
+          Accrual stops at <C>periodFinish</C> unless a further period is funded.
         </P>
         <Table
           head={["Situation", "Behaviour"]}
           rows={[
-            ["Period ends, not renewed", "Emissions stop. Fee revenue is unaffected."],
-            ["Funded again mid-period", "The unspent remainder rolls into the new rate."],
-            ["Nothing staked during a period", "Nothing accrues; that budget stays available."],
+            ["Period ends without renewal", "Emissions stop. Fee distributions are unaffected."],
+            ["Funded again mid-period", "The unspent remainder is added to the new rate."],
+            ["Nothing staked during a period", "Nothing accrues, and the budget remains available."],
             ["Schedule and rate", <TBD key="s" />],
           ]}
         />
-        <Note accent={a} label="Principal is not the budget">
-          $DIVS is both staked and emitted, so the contract keeps the two apart.
-          <C>emissionsFunded</C> holds the reward budget, <C>totalStakedDivs</C> holds deposits, and
-          only funded DIVS can be scheduled. An emission can never be paid out of principal.
+        <Note accent={a} label="Reward budget">
+          $DIVS is both staked and emitted, and the contract holds the two separately.{" "}
+          <C>emissionsFunded</C> tracks the reward budget and <C>totalStakedDivs</C> tracks
+          deposits. Only funded DIVS can be scheduled, so an emission cannot be paid out of
+          principal.
         </Note>
       </>
     ),
@@ -372,18 +395,18 @@ periodFinish = now + duration`}</Pre>
     label: "Contract reference",
     eyebrow: "Reference",
     title: "DivsStaking",
-    lead: "Every entry point, what it returns, and what it refuses.",
+    lead: "Function signatures, views, events and revert reasons.",
     accent: ACCENTS.sky,
     body: () => (
       <>
         <H>User functions</H>
         <div className="mb-6 rounded-xl border border-[#232730] px-4">
           <Spec k="Stake with a lock" v="stake(uint256,uint256,uint256)" />
-          <Spec k="Lengthen a lock" v="extendLock(uint256,uint256)" />
-          <Spec k="Exit, fully or partly" v="unstake(uint256,uint256)" />
-          <Spec k="Collect both assets" v="claim() → (weth, divs)" />
-          <Spec k="Realise an expired lock" v="poke(uint256,address)" />
-          <Spec k="Route fees in" v="notifyFee(uint256)" />
+          <Spec k="Extend a lock" v="extendLock(uint256,uint256)" />
+          <Spec k="Withdraw" v="unstake(uint256,uint256)" />
+          <Spec k="Claim rewards" v="claim() → (weth, divs)" />
+          <Spec k="Update an expired lock" v="poke(uint256,address)" />
+          <Spec k="Distribute a fee" v="notifyFee(uint256)" />
         </div>
 
         <H>Views</H>
@@ -393,13 +416,13 @@ periodFinish = now + duration`}</Pre>
           <Spec k="Lock multiplier, bps" v="lockMultiplierBps(uint256)" />
           <Spec k="Tier multiplier, bps" v="tierMultiplierBps(uint256)" />
           <Spec k="Raw position" v="positions(uint256,address)" />
-          <Spec k="Emission window end" v="lastTimeEmissionApplicable()" />
+          <Spec k="Emission accrual cutoff" v="lastTimeEmissionApplicable()" />
         </div>
 
         <H>Owner functions</H>
         <div className="mb-6 rounded-xl border border-[#232730] px-4">
           <Spec k="Append a pool" v="addPool(address,uint256)" />
-          <Spec k="Reweight a pool" v="setPoolMultiplier(uint256,uint256)" />
+          <Spec k="Change a pool multiplier" v="setPoolMultiplier(uint256,uint256)" />
           <Spec k="Set size tiers" v="setTiers(uint256[],uint256[])" />
           <Spec k="Fund an emission period" v="notifyEmission(uint256,uint256)" />
         </div>
@@ -412,14 +435,17 @@ Claimed(user, wethAmount, divsAmount)
 FeeNotified(from, amount)
 EmissionNotified(amount, rate, periodFinish)`}</Pre>
 
-        <H>Reverts you will meet</H>
+        <H>Revert reasons</H>
         <Table
-          head={["Message", "Cause"]}
+          head={["Message", "Condition"]}
           rows={[
-            ["Still locked", "unstake before the lock expires"],
-            ["Cannot shorten lock", "stake with a lockWeeks ending earlier than the current lock"],
-            ["Not an extension", "extendLock to the same or an earlier end"],
-            ["Bad amount", "unstake of zero, or more than the position holds"],
+            ["Still locked", "unstake called before the lock expires"],
+            [
+              "Cannot shorten lock",
+              "stake called with a lockWeeks ending earlier than the current lock",
+            ],
+            ["Not an extension", "extendLock called with the same or an earlier end"],
+            ["Bad amount", "unstake of zero, or of more than the position holds"],
             ["Insufficient emission budget", "a period scheduled beyond the funded budget"],
           ]}
         />
@@ -429,24 +455,39 @@ EmissionNotified(amount, rate, periodFinish)`}</Pre>
   {
     id: "risks",
     label: "Risks",
-    eyebrow: "Before you stake",
-    title: "What can go against you",
-    lead: "These come from how the protocol works, not from where it is today. Going live does not remove them.",
+    eyebrow: "Risk",
+    title: "Risk factors",
+    lead: "Conditions that can reduce or eliminate a return. They follow from the design of the protocol and apply at every stage of its operation.",
     accent: ACCENTS.rose,
     body: (a) => (
       <>
-        <Note accent={a} label="Irreversible">
-          A lock has no early exit, no penalty option and no transfer. Fifty-two weeks means
-          fifty-two weeks.
+        <Note accent={a} label="Locks are irreversible">
+          A lock cannot be ended early. There is no penalty exit and no transfer of a locked
+          position. A 52-week lock is withdrawable after 52 weeks.
         </Note>
         <Table
           head={["Risk", "Detail"]}
           rows={[
-            ["Fee revenue tracks volume", "No trading means no yield, whatever your weight."],
-            ["Emissions are finite", "They run while a period is funded. Any rate quoting them is temporary."],
-            ["Impermanent loss", "The LP pool carries the usual AMM exposure, on top of DIVS price risk."],
-            ["Weights can be reweighted", "Governance can change a pool multiplier or the tier table."],
-            ["Boosts lapse silently", "An expired lock keeps its weight until touched or poked."],
+            [
+              "Revenue depends on volume",
+              "Fee distributions are a function of trading activity. Low volume produces a low return at any weight.",
+            ],
+            [
+              "Emissions are finite",
+              "Emissions accrue only while a period is funded. A rate that includes them is temporary.",
+            ],
+            [
+              "Impermanent loss",
+              "The LP pool carries standard AMM exposure in addition to $DIVS price risk.",
+            ],
+            [
+              "Multipliers are configurable",
+              "The owner can change a pool multiplier or the tier table, which changes relative weights.",
+            ],
+            [
+              "Expired locks retain weight",
+              "An expired lock keeps its multiplier until the position is updated or poked.",
+            ],
           ]}
         />
       </>
@@ -455,22 +496,46 @@ EmissionNotified(amount, rate, periodFinish)`}</Pre>
   {
     id: "faq",
     label: "FAQ",
-    eyebrow: "Quick answers",
-    title: "Frequently asked",
-    lead: "The questions that come up most.",
+    eyebrow: "Support",
+    title: "Frequently asked questions",
+    lead: "Common questions about staking, rewards and locks.",
     accent: ACCENTS.emerald,
     body: () => (
       <div className="rounded-xl border border-[#232730] px-5">
         {(
           [
-            ["Do I earn just for holding $DIVS?", "No. Rewards accrue to staked positions only. An unstaked balance has zero weight."],
-            ["Can I unstake early?", "No. unstake reverts with “Still locked” until the lock expires. There is no penalty exit."],
-            ["Does claiming reduce my stake?", "No. claim moves earned WETH and DIVS. Principal, lock and weight are untouched."],
-            ["What happens the moment my lock ends?", "Nothing automatic. Weight falls to 1x when the position is next touched, or when anyone pokes it."],
-            ["I staked after a big day. Do I get those fees?", "No. You earn from fees arriving while staked. Earlier fees were already assigned."],
-            ["Do I lose unclaimed rewards by unstaking?", "No. Rewards settle before the withdrawal and stay claimable."],
-            ["Is the advertised rate real yield?", "Only the fee part. Emissions are treasury spend for a fixed period."],
-            ["Why is my share smaller than my deposit suggests?", "Someone else is locked longer, in a heavier pool, or above a tier. Compare weights, not deposits."],
+            [
+              "Does holding $DIVS earn rewards?",
+              "No. Rewards accrue to staked positions only. An unstaked balance has zero weight.",
+            ],
+            [
+              "Can a position be unstaked early?",
+              "No. unstake reverts with “Still locked” until the lock expires. There is no penalty exit.",
+            ],
+            [
+              "Does claiming reduce the stake?",
+              "No. claim transfers earned WETH and DIVS. The deposit, lock and weight are unchanged.",
+            ],
+            [
+              "What happens when a lock ends?",
+              "Nothing automatically. The multiplier falls to 1x when the position is next updated, or when any address calls poke.",
+            ],
+            [
+              "Are fees distributed before a deposit claimable?",
+              "No. A position earns from distributions that occur while it is staked. Earlier fees are already assigned.",
+            ],
+            [
+              "Are unclaimed rewards lost on withdrawal?",
+              "No. Rewards are settled before the withdrawal and remain claimable.",
+            ],
+            [
+              "Does a displayed rate represent fee revenue?",
+              "Only in part. Emissions are treasury-funded and run for a fixed period; fee revenue does not depend on a schedule.",
+            ],
+            [
+              "Why is a share smaller than the deposit suggests?",
+              "Another position is locked for longer, sits in a pool with a higher multiplier, or is above a tier threshold. Shares are proportional to weight, not to deposit.",
+            ],
           ] as [string, string][]
         ).map(([q, ans]) => (
           <div key={q} className="py-4 border-b border-[#1F2228] last:border-0">
@@ -487,7 +552,7 @@ const META: [string, string][] = [
   ["Chain", "Robinhood (4663)"],
   ["Markets", "17"],
   ["Pools", "2"],
-  ["Max boost", "4x"],
+  ["Max lock multiplier", "4x"],
 ];
 
 /* ---------------- section ---------------- */
@@ -536,8 +601,8 @@ export default function DocsSection() {
             DIVS Protocol
           </h1>
           <p className="text-[15px] md:text-base leading-[1.75] text-gray-400 max-w-[56ch] mb-8">
-            How the exchange collects fees, how staking splits them, and every rule that decides
-            what lands in your position.
+            Reference for the DIVS staking contract: how fees are collected, how they are
+            distributed by weight, and the rules governing locks and emissions.
           </p>
           <div className="flex flex-wrap gap-x-10 gap-y-3">
             {META.map(([k, v]) => (
