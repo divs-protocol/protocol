@@ -38,6 +38,11 @@ const SWAP_EVENT = parseAbiItem(
   "event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)",
 );
 
+/** Content measure. Full-bleed rows leave a huge gap between name and price. */
+function Container({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return <div className={`max-w-5xl mx-auto w-full ${className}`}>{children}</div>;
+}
+
 const usd = (n: number, d = 2) =>
   `$${n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })}`;
 
@@ -157,7 +162,7 @@ function Hero({
         aria-hidden
         style={{ background: "radial-gradient(60% 50% at 78% 10%, rgba(16,185,129,0.10), transparent 70%)" }}
       />
-      <div className="relative grid lg:grid-cols-[1fr_460px] gap-10 items-center">
+      <Container><div className="relative grid lg:grid-cols-[1fr_460px] gap-10 items-center">
         <div>
           <h1 className="text-white font-bold tracking-tight text-3xl md:text-5xl leading-[1.08] mb-5">
             Your stock market,
@@ -290,7 +295,7 @@ function Hero({
             </div>
           </div>
         </div>
-      </div>
+      </div></Container>
     </section>
   );
 }
@@ -312,6 +317,7 @@ function HotList({
 
   return (
     <section className="px-1 py-12 md:py-16">
+      <Container>
       <h2 className="text-white font-bold tracking-tight text-2xl md:text-4xl leading-tight mb-8">
         More markets,
         <br />
@@ -342,9 +348,9 @@ function HotList({
         {rows.map((p) => (
           <div
             key={p.market.ticker}
-            className="flex items-center justify-between gap-4 px-3 py-3.5 rounded-xl hover:bg-[#14161B] transition"
+            className="grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_140px_96px_104px] items-center gap-4 px-3 py-3.5 rounded-xl hover:bg-[#14161B] transition"
           >
-            <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="flex items-center gap-3 min-w-0">
               <span className="w-8 h-8 rounded-full bg-[#10B981]/10 border border-[#10B981]/25 text-[#10B981] flex items-center justify-center text-[9px] font-bold flex-shrink-0">
                 {p.market.ticker.slice(0, 2)}
               </span>
@@ -353,21 +359,22 @@ function HotList({
                 <div className="text-[10px] text-gray-500 truncate">{p.market.name}</div>
               </div>
             </div>
-            <div className="font-mono text-[13px] text-white flex-shrink-0">
+            <div className="font-mono text-[13px] text-white text-right">
               {p.usd ? usd(p.usd) : "-"}
             </div>
-            <div className="font-mono text-[11px] text-gray-500 hidden sm:block flex-shrink-0 w-20 text-right">
+            <div className="font-mono text-[11px] text-gray-500 hidden sm:block text-right">
               {(p.market.feeBps / 10000).toFixed(2)}% fee
             </div>
             <button
               onClick={() => onTrade(p.market.ticker)}
-              className="bg-[#10B981]/10 hover:bg-[#10B981] hover:text-black border border-[#10B981]/30 text-[#10B981] text-[11px] font-bold px-5 py-2 rounded-lg transition flex-shrink-0"
+              className="bg-[#10B981]/10 hover:bg-[#10B981] hover:text-black border border-[#10B981]/30 text-[#10B981] text-[11px] font-bold py-2 rounded-lg transition w-full"
             >
               Trade
             </button>
           </div>
         ))}
       </div>
+      </Container>
     </section>
   );
 }
@@ -375,6 +382,7 @@ function HotList({
 function EarnSection({ onNavigate }: { onNavigate: (s: string) => void }) {
   return (
     <section className="px-1 py-12 md:py-16">
+      <Container>
       <h2 className="text-white font-bold tracking-tight text-2xl md:text-4xl text-center mb-10">
         Make your stocks work <span className="text-[#10B981]">for you</span>
       </h2>
@@ -433,6 +441,7 @@ function EarnSection({ onNavigate }: { onNavigate: (s: string) => void }) {
           })}
         </div>
       </div>
+      </Container>
     </section>
   );
 }
@@ -449,6 +458,7 @@ function Products({ onNavigate, onTrade }: { onNavigate: (s: string) => void; on
 
   return (
     <section className="px-1 py-12 md:py-16">
+      <Container>
       <h2 className="text-white font-bold tracking-tight text-2xl md:text-4xl text-center mb-10">
         Discover more products
       </h2>
@@ -468,6 +478,7 @@ function Products({ onNavigate, onTrade }: { onNavigate: (s: string) => void; on
           </button>
         ))}
       </div>
+      </Container>
     </section>
   );
 }
