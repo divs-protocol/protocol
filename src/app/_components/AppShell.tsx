@@ -339,7 +339,21 @@ export default function AppShell({ section }: { section: string }) {
           </header>
 
           {/* DASHBOARD CONTENT BODY */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-none">
+          {/*
+            The dot grid from the protocol page, carried across every section so
+            the app and the landing read as one surface. `local` attachment ties
+            it to the content rather than the viewport, so it scrolls with the
+            page instead of sitting still behind it.
+          */}
+          <div
+            className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-none bg-[#0B0C0E]"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle, rgba(255,255,255,0.085) 1px, transparent 1px)",
+              backgroundSize: "32px 32px",
+              backgroundAttachment: "local",
+            }}
+          >
 
             {/* 1. POOLS VIEW */}
             {activeSection === "home" && (
