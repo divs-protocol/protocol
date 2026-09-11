@@ -17,6 +17,7 @@ import AnalyticsSection from "./_components/AnalyticsSection";
 import ExchangeSection from "./_components/ExchangeSection";
 import StakeSection from "./_components/StakeSection";
 import { PortfolioView, ActivityView, AccountView, SettingsView } from "./_components/SidebarViews";
+import SupportWidget from "./_components/SupportWidget";
 import Footer from "./_components/Footer";
 import { NavContext } from "./_components/nav";
 
@@ -143,6 +144,7 @@ const NAV_ITEMS = [
 
 export default function Home() {
   const [activeSection, setActiveSection] = useState("pools");
+  const [supportOpen, setSupportOpen] = useState(false);
   const { address, isConnected } = useAccount();
   const { connect, connectors } = useConnect();
   const injectedConnector = connectors[0];
@@ -185,9 +187,12 @@ export default function Home() {
           {/* Bottom Icons */}
           <div className="flex flex-col items-start space-y-2 w-full pt-4 border-t border-[#1F2228]">
             <button
-              onClick={() => setActiveSection("exchange")}
-              className="w-full flex items-center space-x-3 p-2.5 rounded-xl hover:bg-[#1F2228] text-gray-400 hover:text-white transition"
-              title="Questions and answers"
+              onClick={() => setSupportOpen(true)}
+              className={`w-full flex items-center space-x-3 p-2.5 rounded-xl transition ${
+                supportOpen
+                  ? "bg-[#10B981] text-black font-bold shadow-md"
+                  : "hover:bg-[#1F2228] text-gray-400 hover:text-white"
+              }`}
             >
               <Headphones size={18} className="flex-shrink-0" />
               <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-xs font-medium whitespace-nowrap overflow-hidden">Support</span>
@@ -572,6 +577,11 @@ export default function Home() {
       </div>
 
     </div>
+      <SupportWidget
+        open={supportOpen}
+        onClose={() => setSupportOpen(false)}
+        onNavigate={setActiveSection}
+      />
     </NavContext.Provider>
   );
 }
