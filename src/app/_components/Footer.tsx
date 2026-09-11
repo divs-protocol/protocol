@@ -12,7 +12,7 @@ import { useNav } from "./nav";
  */
 export default function Footer({ className = "" }: { className?: string }) {
   const nav = useNav();
-  const targets: Record<string, string> = { Docs: "docs", App: "stakes" };
+  const targets: Record<string, string> = { Docs: "docs", App: "stake" };
   return (
     <footer
       className={`border-t border-[#1F2228] py-8 flex flex-col md:flex-row md:items-center justify-between gap-4 ${className}`}

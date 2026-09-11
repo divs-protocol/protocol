@@ -133,9 +133,9 @@ export default function SupportWidget({
               {(
                 [
                   ["Read the docs", "docs"],
-                  ["Stake $DIVS", "stakes"],
+                  ["Stake $DIVS", "stake"],
                   ["Open the exchange", "exchange"],
-                  ["View your portfolio", "positions"],
+                  ["View your portfolio", "portfolio"],
                 ] as const
               ).map(([label, section]) => (
                 <button

@@ -224,7 +224,7 @@ function Hero() {
 
           <div className="flex flex-wrap items-center gap-3 mb-20">
             <button
-              onClick={() => nav("stakes")}
+              onClick={() => nav("stake")}
               className="bg-[#10B981] hover:bg-[#0EA372] text-black font-bold text-xs px-5 py-3 rounded-xl transition shadow-lg shadow-[#10B981]/10"
             >
               Stake $DIVS
@@ -528,7 +528,7 @@ function Cta() {
       <Title>Start earning from the tape.</Title>
       <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
         <button
-          onClick={() => nav("stakes")}
+          onClick={() => nav("stake")}
           className="bg-[#10B981] hover:bg-[#0EA372] text-black font-bold text-xs px-6 py-3 rounded-xl transition shadow-lg shadow-[#10B981]/10"
         >
           Open the app

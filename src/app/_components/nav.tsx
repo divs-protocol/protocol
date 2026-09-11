@@ -3,11 +3,10 @@
 import { createContext, useContext } from "react";
 
 /**
- * Section routing for CTAs that live below the top nav.
+ * Section navigation for controls that sit below the shell.
  *
- * The app is one page with a section in state rather than real routes, so a
- * button in the footer or the landing view needs a way to reach the setter
- * without every section threading a callback through its children.
+ * Sections are real routes; the shell supplies a function that pushes one, so a
+ * button in the footer or the landing view does not need its own router.
  */
 export const NavContext = createContext<(section: string) => void>(() => {});
 export const useNav = () => useContext(NavContext);

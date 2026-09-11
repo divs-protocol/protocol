@@ -563,7 +563,7 @@ function EarnSection({ onNavigate }: { onNavigate: (s: string) => void }) {
             <div className="font-bold text-4xl md:text-5xl text-[#10B981] mb-4">4.00x</div>
             <div className="text-[11px] text-gray-500">weight on the same stake</div>
             <button
-              onClick={() => onNavigate("stakes")}
+              onClick={() => onNavigate("stake")}
               className="mt-6 inline-flex items-center gap-2 bg-[#10B981] hover:bg-[#0EA372] text-black text-[12px] font-bold px-5 py-2.5 rounded-xl transition"
             >
               Stake now <ArrowRight size={13} />
@@ -573,8 +573,8 @@ function EarnSection({ onNavigate }: { onNavigate: (s: string) => void }) {
 
         <div className="grid grid-rows-2 gap-4">
           {[
-            ["$DIVS single-sided", "Share of every trading fee", "WETH", Layers, "stakes"],
-            ["DIVS/WETH LP", "Higher pool weight, plus pair fees", "WETH", Droplets, "stakes"],
+            ["$DIVS single-sided", "Share of every trading fee", "WETH", Layers, "stake"],
+            ["DIVS/WETH LP", "Higher pool weight, plus pair fees", "WETH", Droplets, "stake"],
           ].map(([title, sub, unit, Icon, target]) => {
             const I = Icon as typeof Layers;
             return (
@@ -609,10 +609,10 @@ function EarnSection({ onNavigate }: { onNavigate: (s: string) => void }) {
 function Products({ onNavigate, onTrade }: { onNavigate: (s: string) => void; onTrade: (t: string) => void }) {
   const items: [string, string, typeof Layers, () => void][] = [
     ["Spot", "Swap tokenized equities against WETH, straight from your wallet.", LineChart, () => onTrade(MARKETS[0].ticker)],
-    ["Stake", "Lock $DIVS or LP and collect a share of every fee the platform charges.", Coins, () => onNavigate("stakes")],
+    ["Stake", "Lock $DIVS or LP and collect a share of every fee the platform charges.", Coins, () => onNavigate("stake")],
     ["Markets", "Every listed market, sortable by price, volume and fees paid to stakers.", BarChart3, () => onNavigate("markets")],
     ["Analytics", "Where fees come from, where they go, and how stake is distributed.", TrendingUp, () => onNavigate("analytics")],
-    ["Portfolio", "Your positions, weight and claimable rewards in one place.", Wallet, () => onNavigate("positions")],
+    ["Portfolio", "Your positions, weight and claimable rewards in one place.", Wallet, () => onNavigate("portfolio")],
     ["Docs", "The accounting rules, contract reference and risks, from the source.", BookOpen, () => onNavigate("docs")],
   ];
 
