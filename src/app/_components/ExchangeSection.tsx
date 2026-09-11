@@ -11,11 +11,7 @@ import {
   Flame,
   TrendingUp,
   Layers,
-  BarChart3,
-  BookOpen,
-  Wallet,
   Droplets,
-  LineChart,
   Coins,
 } from "lucide-react";
 import { MARKETS, ETH_USD_POOL, poolAbi, wethPerShare, ethUsdFromSqrt } from "@/lib/exchange";
@@ -607,37 +603,39 @@ function EarnSection({ onNavigate }: { onNavigate: (s: string) => void }) {
 }
 
 function Products({ onNavigate, onTrade }: { onNavigate: (s: string) => void; onTrade: (t: string) => void }) {
-  const items: [string, string, typeof Layers, () => void][] = [
-    ["Spot", "Swap tokenized equities against WETH, straight from your wallet.", LineChart, () => onTrade(MARKETS[0].ticker)],
-    ["Stake", "Lock $DIVS or LP and collect a share of every fee the platform charges.", Coins, () => onNavigate("stake")],
-    ["Markets", "Every listed market, sortable by price, volume and fees paid to stakers.", BarChart3, () => onNavigate("markets")],
-    ["Analytics", "Where fees come from, where they go, and how stake is distributed.", TrendingUp, () => onNavigate("analytics")],
-    ["Portfolio", "Your positions, weight and claimable rewards in one place.", Wallet, () => onNavigate("portfolio")],
-    ["Docs", "The accounting rules, contract reference and risks, from the source.", BookOpen, () => onNavigate("docs")],
+  const items: [string, string, () => void][] = [
+    ["Spot", "Swap tokenized equities against WETH, straight from your wallet. No account, no custody.", () => onTrade(MARKETS[0].ticker)],
+    ["Stake", "Lock $DIVS or the LP and collect a share of every fee the platform charges.", () => onNavigate("stake")],
+    ["Markets", "Every listed market, sortable by price, volume and the fees it pays stakers.", () => onNavigate("markets")],
+    ["Analytics", "Where fees come from, where they go, and how stake is distributed across locks.", () => onNavigate("analytics")],
+    ["Portfolio", "Your holdings priced live, your staking weight, and what is claimable right now.", () => onNavigate("portfolio")],
+    ["Activity", "Every fill from your wallet, decoded from the pools rather than an order log.", () => onNavigate("activity")],
+    ["Docs", "The accounting rules, the contract reference and the risks, taken from the source.", () => onNavigate("docs")],
+    ["Account", "Wallet, network and balance, with the explorer a click away.", () => onNavigate("account")],
   ];
 
   return (
     <section className="px-1 py-12 md:py-16">
       <Container>
-      <h2 className="text-white font-bold tracking-tight text-2xl md:text-4xl text-center mb-10">
-        Discover more products
-      </h2>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {items.map(([title, body, Icon, go]) => (
-          <button
-            key={title}
-            onClick={go}
-            className="bg-[#14161B] border border-[#232730] hover:border-[#10B981]/30 rounded-2xl p-6 text-left transition group"
-          >
-            <span className="w-10 h-10 rounded-xl bg-[#10B981]/10 border border-[#10B981]/25 text-[#10B981] flex items-center justify-center mb-4">
-              <Icon size={17} />
-            </span>
-            <h3 className="text-white font-bold text-lg mb-2 tracking-tight">{title}</h3>
-            <p className="text-[12px] leading-relaxed text-gray-400 mb-4">{body}</p>
-            <ArrowRight size={15} className="text-gray-600 group-hover:text-[#10B981] transition" />
-          </button>
-        ))}
-      </div>
+        <h2 className="text-white font-bold tracking-tight text-2xl md:text-4xl text-center mb-10">
+          Discover more products
+        </h2>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {items.map(([title, body, go]) => (
+            <button
+              key={title}
+              onClick={go}
+              className="bg-[#14161B] border border-[#232730] hover:border-[#10B981]/40 rounded-2xl p-6 text-left transition group flex flex-col min-h-[220px]"
+            >
+              <h3 className="text-white font-bold text-xl mb-3 tracking-tight">{title}</h3>
+              <p className="text-[13px] leading-[1.65] text-gray-400">{body}</p>
+              <ArrowRight
+                size={16}
+                className="text-gray-600 group-hover:text-[#10B981] group-hover:translate-x-0.5 transition mt-auto pt-6"
+              />
+            </button>
+          ))}
+        </div>
       </Container>
     </section>
   );
