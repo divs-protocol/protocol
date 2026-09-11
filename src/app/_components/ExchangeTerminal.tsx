@@ -16,8 +16,9 @@ import Footer from "./Footer";
  *
  * Nothing on this screen is generated. Prices come from each pool's `slot0`,
  * USD from the WETH/USDG pool, and the chart and tape are decoded `Swap`
- * events. The 24h figures are computed from those events, over a window
- * measured from real block timestamps rather than an assumed block time.
+ * events. Period figures are computed from those events over a window measured
+ * from real block timestamps, and labelled by that measurement - blocks here
+ * are ~0.1s, so a lookback that looks large in blocks is only hours.
  */
 
 const SWAP_EVENT = parseAbiItem(
@@ -79,6 +80,7 @@ function usePrices() {
 function useSwaps(market: Market, ethUsd: number) {
   const client = usePublicClient({ chainId: robinhood.id });
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [windowSeconds, setWindowSeconds] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -97,8 +99,11 @@ function useSwaps(market: Market, ethUsd: number) {
           client.getBlock({ blockNumber: from }),
         ]);
 
-        // Measure the window rather than assuming a block time.
-        const perBlock = Number(headBlock.timestamp - fromBlock.timestamp) / Number(head - from);
+        // Measure the window rather than assuming a block time. Blocks here are
+        // ~0.1s, so this range is hours, not a day - the label follows it.
+        const spanSeconds = Number(headBlock.timestamp - fromBlock.timestamp);
+        const perBlock = spanSeconds / Number(head - from);
+        if (!cancelled) setWindowSeconds(spanSeconds);
 
         const out: Trade[] = logs.map((l, i) => {
           const a = l.args;
@@ -133,7 +138,7 @@ function useSwaps(market: Market, ethUsd: number) {
     };
   }, [client, market, ethUsd]);
 
-  return { trades, loading };
+  return { trades, loading, windowSeconds };
 }
 
 function Panel({
@@ -170,10 +175,11 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
   const [amount, setAmount] = useState("");
 
   const active = priced.find((p) => p.market.ticker === ticker) ?? priced[0];
-  const { trades, loading: tradesLoading } = useSwaps(active.market, ethUsd);
+  const { trades, loading: tradesLoading, windowSeconds } = useSwaps(active.market, ethUsd);
+  const win = windowSeconds >= 82_800 ? "24h" : windowSeconds >= 3_600 ? `${Math.round(windowSeconds / 3600)}h` : "recent";
 
   const stats = useMemo(() => {
-    const day = trades.filter((t) => t.secondsAgo <= 86_400);
+    const day = trades;
     const vol = day.reduce((s, t) => s + t.weth * ethUsd, 0);
     const first = day[0];
     const change = first && active.usd ? ((active.usd - first.price) / first.price) * 100 : 0;
@@ -232,12 +238,12 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
   const qty = Number(amount) || 0;
 
   const headline: [string, string, string][] = [
-    ["24h change", stats.windowed ? `${up ? "+" : ""}${stats.change.toFixed(2)}%` : "-", up ? "text-[#10B981]" : "text-red-400"],
-    ["24h volume", stats.vol ? usd(stats.vol, 0) : "-", "text-gray-300"],
-    ["24h high", stats.hi ? usd(stats.hi) : "-", "text-gray-300"],
-    ["24h low", stats.lo ? usd(stats.lo) : "-", "text-gray-300"],
+    [`${win} change`, stats.windowed ? `${up ? "+" : ""}${stats.change.toFixed(2)}%` : "-", up ? "text-[#10B981]" : "text-red-400"],
+    [`${win} volume`, stats.vol ? usd(stats.vol, 0) : "-", "text-gray-300"],
+    [`${win} high`, stats.hi ? usd(stats.hi) : "-", "text-gray-300"],
+    [`${win} low`, stats.lo ? usd(stats.lo) : "-", "text-gray-300"],
     ["Pool fee", `${(active.market.feeBps / 10000).toFixed(2)}%`, "text-gray-300"],
-    ["Trades 24h", stats.count ? String(stats.count) : "-", "text-gray-300"],
+    [`Trades ${win}`, stats.count ? String(stats.count) : "-", "text-gray-300"],
   ];
 
   return (

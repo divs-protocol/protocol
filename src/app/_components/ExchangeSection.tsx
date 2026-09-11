@@ -73,6 +73,85 @@ function usePrices() {
   return { priced, ethUsd, isLoading };
 }
 
+/**
+ * A stable colour per ticker. A wall of identical green badges reads as a
+ * placeholder; distinct colours let the eye find a row.
+ */
+export function tickerColor(ticker: string) {
+  let h = 0;
+  for (let i = 0; i < ticker.length; i++) h = (h * 31 + ticker.charCodeAt(i)) >>> 0;
+  const hue = h % 360;
+  return { fg: `hsl(${hue} 70% 62%)`, bg: `hsl(${hue} 70% 62% / 0.12)`, border: `hsl(${hue} 70% 62% / 0.3)` };
+}
+
+/** Seconds to a short window label, so a figure is never labelled 24h unless it is. */
+export function windowLabel(seconds: number) {
+  if (seconds >= 82_800) return "24h";
+  if (seconds >= 3_600) return `${Math.round(seconds / 3600)}h`;
+  return `${Math.max(1, Math.round(seconds / 60))}m`;
+}
+
+/**
+ * Change and volume for every market, from a single getLogs across all pools -
+ * per-pool requests would be 17 round trips on first paint.
+ *
+ * The window is whatever the block range actually covers, and is returned so
+ * the UI can label it. Blocks here are ~0.1s, so a 24h window would be roughly
+ * 850k blocks and the RPC rejects a multi-pool query that large.
+ */
+function useMarketStats(ethUsd: number) {
+  const client = usePublicClient({ chainId: robinhood.id });
+  const [stats, setStats] = useState<Record<string, { change: number; volume: number }>>({});
+  const [label, setLabel] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!client || !ethUsd) return;
+
+    (async () => {
+      try {
+        const head = await client.getBlockNumber();
+        // 17 pools over a larger range is refused by the RPC.
+        const from = head > 40_000n ? head - 40_000n : 0n;
+        const [logs, headBlock, fromBlock] = await Promise.all([
+          client.getLogs({ address: MARKETS.map((m) => m.pool), event: SWAP_EVENT, fromBlock: from, toBlock: head }),
+          client.getBlock({ blockNumber: head }),
+          client.getBlock({ blockNumber: from }),
+        ]);
+        const span = Number(headBlock.timestamp - fromBlock.timestamp);
+
+        const out: Record<string, { change: number; volume: number }> = {};
+        for (const m of MARKETS) {
+          const day = logs.filter((l) => l.address.toLowerCase() === m.pool.toLowerCase());
+          if (!day.length) continue;
+
+          const priceAt = (l: (typeof day)[number]) =>
+            wethPerShare(m, l.args.sqrtPriceX96 as bigint) * ethUsd;
+          const open = priceAt(day[0]);
+          const close = priceAt(day[day.length - 1]);
+          const volume = day.reduce((sum, l) => {
+            const a = m.wethIsToken0 ? (l.args.amount0 as bigint) : (l.args.amount1 as bigint);
+            return sum + Math.abs(Number(a < 0n ? -a : a)) / 1e18;
+          }, 0);
+          out[m.ticker] = { change: open ? ((close - open) / open) * 100 : 0, volume: volume * ethUsd };
+        }
+        if (!cancelled) {
+          setStats(out);
+          setLabel(windowLabel(span));
+        }
+      } catch {
+        if (!cancelled) setStats({});
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client, ethUsd]);
+
+  return { stats, label };
+}
+
 /** Recent price path for the featured market, for the hero sparkline. */
 function useFeaturedSeries(poolAddress: `0x${string}`, wethIsToken0: boolean, ethUsd: number) {
   const client = usePublicClient({ chainId: robinhood.id });
@@ -300,42 +379,75 @@ function Hero({
   );
 }
 
-function HotList({
-  priced,
+function MarketRow({
+  p,
+  stat,
   onTrade,
 }: {
-  priced: ReturnType<typeof usePrices>["priced"];
+  p: { market: (typeof MARKETS)[number]; usd: number };
+  stat?: { change: number; volume: number };
   onTrade: (t: string) => void;
 }) {
-  const [tab, setTab] = useState<"stocks" | "etfs" | "all">("stocks");
-
-  const rows = useMemo(() => {
-    const base =
-      tab === "all" ? priced : priced.filter((p) => p.market.kind === (tab === "etfs" ? "etf" : "stock"));
-    return [...base].sort((a, b) => b.usd - a.usd).slice(0, 8);
-  }, [priced, tab]);
+  const c = tickerColor(p.market.ticker);
+  const up = (stat?.change ?? 0) >= 0;
 
   return (
-    <section className="px-1 py-12 md:py-16">
-      <Container>
-      <h2 className="text-white font-bold tracking-tight text-2xl md:text-4xl leading-tight mb-8">
-        More markets,
-        <br />
-        more opportunity.
-      </h2>
+    <div className="grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_112px_84px_84px] items-center gap-3 px-2 py-3.5 rounded-xl hover:bg-[#14161B] transition">
+      <div className="flex items-center gap-3 min-w-0">
+        <span
+          className="w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 border"
+          style={{ background: c.bg, color: c.fg, borderColor: c.border }}
+        >
+          {p.market.ticker.slice(0, 2)}
+        </span>
+        <span className="min-w-0 flex items-baseline gap-2">
+          <span className="text-[14px] font-semibold text-white truncate">{p.market.name}</span>
+          <span className="text-[11px] text-gray-500 font-mono flex-shrink-0">{p.market.ticker}</span>
+        </span>
+      </div>
 
-      <div className="flex items-center gap-5 border-b border-[#232730] mb-4">
-        {(
-          [
-            ["stocks", "Hot Stocks"],
-            ["etfs", "ETFs & Commodities"],
-            ["all", "All Markets"],
-          ] as const
-        ).map(([id, label]) => (
+      <div className="font-mono text-[14px] text-white text-right">{p.usd ? usd(p.usd) : "-"}</div>
+
+      <div
+        className={`font-mono text-[12px] text-right hidden sm:block ${
+          stat === undefined ? "text-gray-600" : up ? "text-[#10B981]" : "text-red-400"
+        }`}
+      >
+        {stat === undefined ? "-" : `${up ? "+" : ""}${stat.change.toFixed(2)}%`}
+      </div>
+
+      <button
+        onClick={() => onTrade(p.market.ticker)}
+        className="bg-[#10B981]/10 hover:bg-[#10B981] hover:text-black border border-[#10B981]/30 text-[#10B981] text-[11px] font-bold py-2 rounded-lg transition w-full"
+      >
+        Trade
+      </button>
+    </div>
+  );
+}
+
+function MarketColumn({
+  tabs,
+  rowsFor,
+  stats,
+  onTrade,
+}: {
+  tabs: [string, string][];
+  rowsFor: (tab: string) => { market: (typeof MARKETS)[number]; usd: number }[];
+  stats: Record<string, { change: number; volume: number }>;
+  onTrade: (t: string) => void;
+}) {
+  const [tab, setTab] = useState(tabs[0][0]);
+  const rows = rowsFor(tab);
+
+  return (
+    <div>
+      <div className="flex items-center gap-5 border-b border-[#232730] mb-2">
+        {tabs.map(([id, label]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={`pb-2.5 text-[12px] font-semibold transition border-b-2 -mb-px ${
+            className={`pb-2.5 text-[14px] font-semibold transition border-b-2 -mb-px ${
               tab === id ? "text-white border-[#10B981]" : "text-gray-500 border-transparent hover:text-white"
             }`}
           >
@@ -343,37 +455,85 @@ function HotList({
           </button>
         ))}
       </div>
-
-      <div className="space-y-1">
+      <div>
         {rows.map((p) => (
-          <div
-            key={p.market.ticker}
-            className="grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_140px_96px_104px] items-center gap-4 px-3 py-3.5 rounded-xl hover:bg-[#14161B] transition"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <span className="w-8 h-8 rounded-full bg-[#10B981]/10 border border-[#10B981]/25 text-[#10B981] flex items-center justify-center text-[9px] font-bold flex-shrink-0">
-                {p.market.ticker.slice(0, 2)}
-              </span>
-              <div className="min-w-0">
-                <div className="text-[13px] font-semibold text-white">{p.market.ticker}</div>
-                <div className="text-[10px] text-gray-500 truncate">{p.market.name}</div>
-              </div>
-            </div>
-            <div className="font-mono text-[13px] text-white text-right">
-              {p.usd ? usd(p.usd) : "-"}
-            </div>
-            <div className="font-mono text-[11px] text-gray-500 hidden sm:block text-right">
-              {(p.market.feeBps / 10000).toFixed(2)}% fee
-            </div>
-            <button
-              onClick={() => onTrade(p.market.ticker)}
-              className="bg-[#10B981]/10 hover:bg-[#10B981] hover:text-black border border-[#10B981]/30 text-[#10B981] text-[11px] font-bold py-2 rounded-lg transition w-full"
-            >
-              Trade
-            </button>
-          </div>
+          <MarketRow key={p.market.ticker} p={p} stat={stats[p.market.ticker]} onTrade={onTrade} />
         ))}
+        {rows.length === 0 && (
+          <div className="px-2 py-10 text-center text-[11px] text-gray-500">Nothing here right now.</div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function HotList({
+  priced,
+  stats,
+  windowLabel: win,
+  onTrade,
+}: {
+  priced: ReturnType<typeof usePrices>["priced"];
+  stats: Record<string, { change: number; volume: number }>;
+  windowLabel: string;
+  onTrade: (t: string) => void;
+}) {
+  const byChange = (dir: 1 | -1) =>
+    [...priced]
+      .filter((p) => stats[p.market.ticker] !== undefined)
+      .sort((a, b) => dir * ((stats[b.market.ticker]?.change ?? 0) - (stats[a.market.ticker]?.change ?? 0)));
+
+  const byVolume = [...priced].sort(
+    (a, b) => (stats[b.market.ticker]?.volume ?? 0) - (stats[a.market.ticker]?.volume ?? 0),
+  );
+
+  return (
+    <section className="px-1 py-12 md:py-16">
+      <Container>
+        <h2 className="text-white font-bold tracking-tight text-2xl md:text-4xl leading-tight mb-8">
+          More markets,
+          <br />
+          more opportunity.
+        </h2>
+        {win && (
+          <p className="text-[11px] text-gray-500 -mt-5 mb-7">
+            Change shown over the last {win}, from on-chain swaps.
+          </p>
+        )}
+
+        <div className="grid lg:grid-cols-2 gap-x-10 gap-y-8">
+          <MarketColumn
+            tabs={[
+              ["hot", "Hot Stocks"],
+              ["gainers", "Gainers"],
+              ["losers", "Losers"],
+            ]}
+            rowsFor={(tab) => {
+              const stocks = priced.filter((p) => p.market.kind === "stock");
+              if (tab === "gainers") return byChange(1).filter((p) => p.market.kind === "stock").slice(0, 7);
+              if (tab === "losers") return byChange(-1).filter((p) => p.market.kind === "stock").slice(0, 7);
+              return byVolume.filter((p) => p.market.kind === "stock").slice(0, 7).length
+                ? byVolume.filter((p) => p.market.kind === "stock").slice(0, 7)
+                : stocks.slice(0, 7);
+            }}
+            stats={stats}
+            onTrade={onTrade}
+          />
+
+          <MarketColumn
+            tabs={[
+              ["etf", "ETFs & Commodities"],
+              ["all", "All Markets"],
+            ]}
+            rowsFor={(tab) =>
+              tab === "etf"
+                ? priced.filter((p) => p.market.kind === "etf").slice(0, 7)
+                : byVolume.slice(0, 7)
+            }
+            stats={stats}
+            onTrade={onTrade}
+          />
+        </div>
       </Container>
     </section>
   );
@@ -544,13 +704,14 @@ function QA() {
 export default function ExchangeSection({ onNavigate }: { onNavigate: (s: string) => void }) {
   const [terminal, setTerminal] = useState<string | null>(null);
   const { priced, ethUsd } = usePrices();
+  const { stats, label: statsWindow } = useMarketStats(ethUsd);
 
   if (terminal) return <ExchangeTerminal initialTicker={terminal} onBack={() => setTerminal(null)} />;
 
   return (
     <div className="space-y-2">
       <Hero priced={priced} ethUsd={ethUsd} onTrade={setTerminal} />
-      <HotList priced={priced} onTrade={setTerminal} />
+      <HotList priced={priced} stats={stats} windowLabel={statsWindow} onTrade={setTerminal} />
       <EarnSection onNavigate={onNavigate} />
       <Products onNavigate={onNavigate} onTrade={setTerminal} />
       <QA />
