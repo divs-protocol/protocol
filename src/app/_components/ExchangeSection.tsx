@@ -610,7 +610,7 @@ function Products({ onNavigate, onTrade }: { onNavigate: (s: string) => void; on
     ["Analytics", "Where fees come from, where they go, and how stake is distributed across locks.", () => onNavigate("analytics")],
     ["Portfolio", "Your holdings priced live, your staking weight, and what is claimable right now.", () => onNavigate("portfolio")],
     ["Activity", "Every fill from your wallet, decoded from the pools rather than an order log.", () => onNavigate("activity")],
-    ["Docs", "The accounting rules, the contract reference and the risks, taken from the source.", () => onNavigate("docs")],
+    ["Docs", "The accounting rules, the contract reference and the risks, in full.", () => onNavigate("docs")],
     ["Account", "Wallet, network and balance, with the explorer a click away.", () => onNavigate("account")],
   ];
 

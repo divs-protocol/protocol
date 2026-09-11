@@ -7,9 +7,9 @@ import Footer from "./Footer";
 /**
  * Protocol documentation.
  *
- * Structured as a field guide rather than a printed page: a contents rail that
- * follows the reader, numbered steps for anything sequential, spec rows for
- * anything referenced, and callouts for the rules that decide an outcome.
+ * A contents rail that follows the reader, numbered steps for anything
+ * sequential, spec rows for anything referenced, and callouts for the rules
+ * that decide an outcome.
  *
  * Each topic carries an accent colour. Not decoration - it keys the rail, the
  * eyebrow and the step numerals together, so a reader scrolling always knows
@@ -530,14 +530,14 @@ export default function DocsSection() {
       <header className="px-6 md:px-12 lg:px-16 pt-12 pb-10 border-b border-[#1F2228]">
         <div className="max-w-5xl">
           <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#10B981] mb-4">
-            Field guide
+            Documentation
           </div>
           <h1 className="text-white font-bold tracking-tight text-3xl md:text-5xl leading-[1.08] mb-5">
             DIVS Protocol
           </h1>
           <p className="text-[15px] md:text-base leading-[1.75] text-gray-400 max-w-[56ch] mb-8">
             How the exchange collects fees, how staking splits them, and every rule that decides
-            what lands in your position. Derived from the contract, not written beside it.
+            what lands in your position.
           </p>
           <div className="flex flex-wrap gap-x-10 gap-y-3">
             {META.map(([k, v]) => (
