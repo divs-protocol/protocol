@@ -57,7 +57,7 @@ export default function AppShell({ section }: { section: string }) {
    * be six hardcoded tickers, a chart whose axis ran to 60,000 for a $124
    * stock, and eight identical order-book rows.
    */
-  const { markets, ethUsd, window: win } = useLiveMarkets();
+  const { markets, ethUsd, window: win, loading: marketsLoading } = useLiveMarkets();
   const [ticker, setTicker] = useState("NVDA");
   const [orderType, setOrderType] = useState("limit");
   const [limitPrice, setLimitPrice] = useState("");
@@ -86,6 +86,14 @@ export default function AppShell({ section }: { section: string }) {
     () => trades.slice().sort((a, b) => b.value - a.value).slice(0, 8),
     [trades],
   );
+
+  /*
+   * Before the snapshot lands there is no price, and rendering that as $0.00
+   * reads as a broken number rather than a pending one.
+   */
+  const px = (v: number | undefined) => (marketsLoading ? "···" : usd(v ?? 0));
+  const pct = (v: number | undefined) =>
+    marketsLoading ? "···" : `${(v ?? 0) >= 0 ? "+" : ""}${(v ?? 0).toFixed(2)}%`;
 
   const orderTotal =
     (Number(orderAmount) || 0) *
@@ -310,13 +318,13 @@ export default function AppShell({ section }: { section: string }) {
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-center">
                             <span className="text-white font-bold text-xs">{m.ticker}</span>
-                            <span className="text-gray-300 text-[11px] font-medium">{usd(m.price)}</span>
+                            <span className="text-gray-300 text-[11px] font-medium">{px(m.price)}</span>
                           </div>
                           <div className="flex justify-between items-center mt-0.5">
                             <span className="text-[9px] text-gray-500 truncate">{m.name}</span>
                             <span className={`text-[9px] font-semibold flex items-center ${up ? "text-[#10B981]" : "text-red-400"}`}>
                               {up ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
-                              {m.change.toFixed(2)}%
+                              {marketsLoading ? "···" : `${m.change.toFixed(2)}%`}
                             </span>
                           </div>
                         </div>
@@ -349,26 +357,25 @@ export default function AppShell({ section }: { section: string }) {
                                   : "bg-red-500/20 text-red-400"
                               }`}
                             >
-                              {(selected?.change ?? 0) >= 0 ? "+" : ""}
-                              {(selected?.change ?? 0).toFixed(2)}%
+                              {pct(selected?.change)}
                             </span>
                           </div>
-                          <span className="text-lg font-extrabold text-white">{usd(selected?.price ?? 0)}</span>
+                          <span className="text-lg font-extrabold text-white">{px(selected?.price)}</span>
                         </div>
                       </div>
 
                       <div className="flex space-x-4 text-right">
                         <div>
                           <div className="text-[9px] text-gray-500">{win} trades</div>
-                          <div className="text-white font-semibold text-xs">{num(selected?.txns ?? 0)}</div>
+                          <div className="text-white font-semibold text-xs">{marketsLoading ? "···" : num(selected?.txns ?? 0)}</div>
                         </div>
                         <div>
                           <div className="text-[9px] text-gray-500">{win} volume</div>
-                          <div className="text-white font-semibold text-xs">{compact(selected?.volume ?? 0)}</div>
+                          <div className="text-white font-semibold text-xs">{marketsLoading ? "···" : compact(selected?.volume ?? 0)}</div>
                         </div>
                         <div>
                           <div className="text-[9px] text-gray-500">Liquidity</div>
-                          <div className="text-white font-semibold text-xs">{compact(selected?.tvl ?? 0)}</div>
+                          <div className="text-white font-semibold text-xs">{marketsLoading ? "···" : compact(selected?.tvl ?? 0)}</div>
                         </div>
                       </div>
                     </div>
@@ -431,7 +438,7 @@ export default function AppShell({ section }: { section: string }) {
                           <span className="text-white font-bold">{selected?.ticker}</span>
                         </div>
                         <span className="text-[10px] text-gray-400">
-                          1 {selected?.ticker} = {usd(selected?.price ?? 0)}
+                          1 {selected?.ticker} = {px(selected?.price)}
                         </span>
                       </div>
 
@@ -468,7 +475,7 @@ export default function AppShell({ section }: { section: string }) {
                     <div>
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-gray-400 text-xs">Total:</span>
-                        <span className="text-[#10B981] font-extrabold text-sm">{usd(orderTotal)}</span>
+                        <span className="text-[#10B981] font-extrabold text-sm">{px(orderTotal)}</span>
                       </div>
                       <button
                         onClick={() =>

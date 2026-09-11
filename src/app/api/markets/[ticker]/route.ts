@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { findMarket, wethPerShare } from "@/lib/exchange";
-import { cached, client, getSwapLogs, readPoolStates, spanLabel, type SwapLog } from "@/lib/chain";
+import { cached, client, getSwapLogs, readEthUsd, spanLabel, type SwapLog } from "@/lib/chain";
 
 /**
  * One market's history and tape.
@@ -55,8 +55,10 @@ async function load(ticker: string, span: string): Promise<MarketDetail> {
   const head = await client.getBlockNumber();
   const from = head > blocks ? head - blocks : 0n;
 
-  const [{ ethUsd }, logs, headBlock, fromBlock] = await Promise.all([
-    readPoolStates(),
+  // Only the ETH price is needed here; reading all seventeen pools again just
+  // to get it doubled the cost of opening a market.
+  const [ethUsd, logs, headBlock, fromBlock] = await Promise.all([
+    cached("ethUsd", 15_000, readEthUsd),
     getSwapLogs([m.pool], from, head),
     client.getBlock({ blockNumber: head }),
     client.getBlock({ blockNumber: from }),

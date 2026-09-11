@@ -122,6 +122,16 @@ export async function readPoolStates() {
   return { states, ethUsd: ethSlot0 ? ethUsdFromSqrt(ethSlot0[0]) : 0 };
 }
 
+/** ETH/USD alone - one call, for routes that need the price and nothing else. */
+export async function readEthUsd(): Promise<number> {
+  const slot0 = (await client.readContract({
+    address: ETH_USD_POOL,
+    abi: poolAbi,
+    functionName: "slot0",
+  })) as readonly [bigint, ...unknown[]];
+  return ethUsdFromSqrt(slot0[0]);
+}
+
 /**
  * Reduce a pool's swaps to the numbers a row needs.
  *
@@ -189,18 +199,50 @@ export function spanLabel(seconds: number) {
 
 /* ---------------- a small cache, so one read serves every visitor ---------------- */
 
-type Entry<T> = { at: number; value: Promise<T> };
+type Entry<T> = { at: number; value?: T; inflight?: Promise<T> };
 const cache = new Map<string, Entry<unknown>>();
 
+/**
+ * Cache with stale-while-revalidate.
+ *
+ * A full index read is several seconds of chain, so expiring the entry and
+ * making the next caller wait for a fresh one means somebody pays that cost
+ * every fifteen seconds. Once there is a value, callers get it immediately and
+ * the refresh happens behind them; only the very first caller waits, and
+ * concurrent first callers share that one load rather than each starting their
+ * own.
+ */
 export function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
-  const hit = cache.get(key) as Entry<T> | undefined;
-  if (hit && Date.now() - hit.at < ttlMs) return hit.value;
+  const entry = (cache.get(key) as Entry<T> | undefined) ?? { at: 0 };
+  cache.set(key, entry as Entry<unknown>);
 
-  const value = load().catch((error) => {
-    // A failed read should not be cached, or one blip lasts the whole TTL.
-    cache.delete(key);
-    throw error;
-  });
-  cache.set(key, { at: Date.now(), value });
-  return value;
+  const stale = Date.now() - entry.at >= ttlMs;
+
+  const refresh = () => {
+    const inflight = load()
+      .then((value) => {
+        entry.value = value;
+        entry.at = Date.now();
+        entry.inflight = undefined;
+        return value;
+      })
+      .catch((error) => {
+        // A failed refresh leaves the last good value in place and lets the
+        // next request try again, rather than poisoning the entry.
+        entry.inflight = undefined;
+        throw error;
+      });
+    entry.inflight = inflight;
+    return inflight;
+  };
+
+  if (entry.value !== undefined) {
+    if (stale && !entry.inflight) {
+      // Nobody is waiting on this one, so its rejection must not go unhandled.
+      refresh().catch(() => {});
+    }
+    return Promise.resolve(entry.value);
+  }
+
+  return entry.inflight ?? refresh();
 }
