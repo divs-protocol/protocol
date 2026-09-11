@@ -584,7 +584,7 @@ export default function Home() {
 
             {activeSection === "analytics" && <AnalyticsSection />}
 
-            {activeSection === "exchange" && <ExchangeSection />}
+            {activeSection === "exchange" && <ExchangeSection onNavigate={setActiveSection} />}
 
             {activeSection === "docs" && <DocsSection />}
 
