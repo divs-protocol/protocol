@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useAccount, useConnect, usePublicClient, useReadContracts } from "wagmi";
-import { robinhood } from "wagmi/chains";
-import { parseAbiItem } from "viem";
+import { useMemo, useState } from "react";
+import { useAccount, useConnect } from "wagmi";
 import {
   ArrowRight,
   Plus,
@@ -14,7 +12,8 @@ import {
   Droplets,
   Coins,
 } from "lucide-react";
-import { MARKETS, ETH_USD_POOL, poolAbi, wethPerShare, ethUsdFromSqrt } from "@/lib/exchange";
+import { MARKETS } from "@/lib/exchange";
+import { useLiveMarkets, type LiveMarket } from "@/lib/live";
 import ExchangeTerminal from "./ExchangeTerminal";
 import Footer from "./Footer";
 
@@ -30,10 +29,6 @@ import Footer from "./Footer";
  * the trading terminal.
  */
 
-const SWAP_EVENT = parseAbiItem(
-  "event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)",
-);
-
 /** Content measure. Full-bleed rows leave a huge gap between name and price. */
 function Container({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <div className={`max-w-5xl mx-auto w-full ${className}`}>{children}</div>;
@@ -44,29 +39,35 @@ const usd = (n: number, d = 2) =>
 
 /* ---------------- live prices, shared by every panel ---------------- */
 
+/**
+ * Prices and window stats, both from the shared `/api/markets` snapshot.
+ *
+ * These used to read the chain here: one multicall for prices and one getLogs
+ * across all seventeen pools for change and volume. The log query asked for
+ * 40,000 blocks, which matches well over the node's 10,000-log limit, so it
+ * threw on every load and a bare catch turned that into an empty stats map -
+ * the reason every market showed +0.00%. The snapshot pages its queries and is
+ * computed once on the server.
+ */
+type Priced = { market: LiveMarket; weth: number; usd: number };
+
 function usePrices() {
-  const contracts = useMemo(
-    () => [
-      ...MARKETS.map(
-        (m) => ({ address: m.pool, abi: poolAbi, functionName: "slot0", chainId: robinhood.id }) as const,
-      ),
-      { address: ETH_USD_POOL, abi: poolAbi, functionName: "slot0", chainId: robinhood.id } as const,
-    ],
-    [],
+  const { markets, ethUsd, loading } = useLiveMarkets();
+
+  const priced = useMemo(
+    (): Priced[] => markets.map((m) => ({ market: m, weth: ethUsd ? m.price / ethUsd : 0, usd: m.price })),
+    [markets, ethUsd],
   );
 
-  const { data, isLoading } = useReadContracts({ contracts, query: { refetchInterval: 15_000 } });
+  const stats = useMemo(() => {
+    const out: Record<string, { change: number; volume: number }> = {};
+    for (const m of markets) {
+      if (m.txns > 0) out[m.ticker] = { change: m.change, volume: m.volume };
+    }
+    return out;
+  }, [markets]);
 
-  const ethRaw = data?.[MARKETS.length]?.result as readonly unknown[] | undefined;
-  const ethUsd = ethRaw ? ethUsdFromSqrt(ethRaw[0] as bigint) : 0;
-
-  const priced = MARKETS.map((m, i) => {
-    const slot0 = data?.[i]?.result as readonly unknown[] | undefined;
-    const weth = slot0 ? wethPerShare(m, slot0[0] as bigint) : 0;
-    return { market: m, weth, usd: weth * ethUsd };
-  });
-
-  return { priced, ethUsd, isLoading };
+  return { priced, ethUsd, isLoading: loading, stats };
 }
 
 /**
@@ -85,104 +86,6 @@ export function windowLabel(seconds: number) {
   if (seconds >= 82_800) return "24h";
   if (seconds >= 3_600) return `${Math.round(seconds / 3600)}h`;
   return `${Math.max(1, Math.round(seconds / 60))}m`;
-}
-
-/**
- * Change and volume for every market, from a single getLogs across all pools -
- * per-pool requests would be 17 round trips on first paint.
- *
- * The window is whatever the block range actually covers, and is returned so
- * the UI can label it. Blocks here are ~0.1s, so a 24h window would be roughly
- * 850k blocks and the RPC rejects a multi-pool query that large.
- */
-function useMarketStats(ethUsd: number) {
-  const client = usePublicClient({ chainId: robinhood.id });
-  const [stats, setStats] = useState<Record<string, { change: number; volume: number }>>({});
-  const [label, setLabel] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!client || !ethUsd) return;
-
-    (async () => {
-      try {
-        const head = await client.getBlockNumber();
-        // 17 pools over a larger range is refused by the RPC.
-        const from = head > 40_000n ? head - 40_000n : 0n;
-        const [logs, headBlock, fromBlock] = await Promise.all([
-          client.getLogs({ address: MARKETS.map((m) => m.pool), event: SWAP_EVENT, fromBlock: from, toBlock: head }),
-          client.getBlock({ blockNumber: head }),
-          client.getBlock({ blockNumber: from }),
-        ]);
-        const span = Number(headBlock.timestamp - fromBlock.timestamp);
-
-        const out: Record<string, { change: number; volume: number }> = {};
-        for (const m of MARKETS) {
-          const day = logs.filter((l) => l.address.toLowerCase() === m.pool.toLowerCase());
-          if (!day.length) continue;
-
-          const priceAt = (l: (typeof day)[number]) =>
-            wethPerShare(m, l.args.sqrtPriceX96 as bigint) * ethUsd;
-          const open = priceAt(day[0]);
-          const close = priceAt(day[day.length - 1]);
-          const volume = day.reduce((sum, l) => {
-            const a = m.wethIsToken0 ? (l.args.amount0 as bigint) : (l.args.amount1 as bigint);
-            return sum + Math.abs(Number(a < 0n ? -a : a)) / 1e18;
-          }, 0);
-          out[m.ticker] = { change: open ? ((close - open) / open) * 100 : 0, volume: volume * ethUsd };
-        }
-        if (!cancelled) {
-          setStats(out);
-          setLabel(windowLabel(span));
-        }
-      } catch {
-        if (!cancelled) setStats({});
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [client, ethUsd]);
-
-  return { stats, label };
-}
-
-/** Recent price path for the featured market, for the hero sparkline. */
-function useFeaturedSeries(poolAddress: `0x${string}`, wethIsToken0: boolean, ethUsd: number) {
-  const client = usePublicClient({ chainId: robinhood.id });
-  const [points, setPoints] = useState<number[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!client || !ethUsd) return;
-
-    (async () => {
-      try {
-        const head = await client.getBlockNumber();
-        const logs = await client.getLogs({
-          address: poolAddress,
-          event: SWAP_EVENT,
-          fromBlock: head > 120_000n ? head - 120_000n : 0n,
-          toBlock: head,
-        });
-        const px = logs.map((l) => {
-          const sqrt = l.args.sqrtPriceX96 as bigint;
-          const p = wethPerShare({ wethIsToken0 } as never, sqrt);
-          return p * ethUsd;
-        });
-        if (!cancelled) setPoints(px.slice(-60));
-      } catch {
-        if (!cancelled) setPoints([]);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [client, poolAddress, wethIsToken0, ethUsd]);
-
-  return points;
 }
 
 function Sparkline({ points, up }: { points: number[]; up: boolean }) {
@@ -210,11 +113,9 @@ function Sparkline({ points, up }: { points: number[]; up: boolean }) {
 
 function Hero({
   priced,
-  ethUsd,
   onTrade,
 }: {
   priced: ReturnType<typeof usePrices>["priced"];
-  ethUsd: number;
   onTrade: (t: string) => void;
 }) {
   const { isConnected } = useAccount();
@@ -222,7 +123,7 @@ function Hero({
   const injected = connectors[0];
 
   const featured = priced.find((p) => p.market.ticker === "AAPL") ?? priced[0];
-  const series = useFeaturedSeries(featured.market.pool, featured.market.wethIsToken0, ethUsd);
+  const series = featured.market.series;
   const up = series.length > 1 ? series[series.length - 1] >= series[0] : true;
   const changePct =
     series.length > 1 ? ((series[series.length - 1] - series[0]) / series[0]) * 100 : 0;
@@ -706,14 +607,14 @@ function QA() {
 
 export default function ExchangeSection({ onNavigate }: { onNavigate: (s: string) => void }) {
   const [terminal, setTerminal] = useState<string | null>(null);
-  const { priced, ethUsd } = usePrices();
-  const { stats, label: statsWindow } = useMarketStats(ethUsd);
+  const { priced, stats } = usePrices();
+  const { window: statsWindow } = useLiveMarkets();
 
   if (terminal) return <ExchangeTerminal initialTicker={terminal} onBack={() => setTerminal(null)} />;
 
   return (
     <div className="space-y-2">
-      <Hero priced={priced} ethUsd={ethUsd} onTrade={setTerminal} />
+      <Hero priced={priced} onTrade={setTerminal} />
       <HotList priced={priced} stats={stats} windowLabel={statsWindow} onTrade={setTerminal} />
       <EarnSection onNavigate={onNavigate} />
       <Products onNavigate={onNavigate} onTrade={setTerminal} />
