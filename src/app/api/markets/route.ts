@@ -17,8 +17,14 @@ export type { MarketRow, MarketsSnapshot } from "@/lib/snapshot";
 export async function GET() {
   try {
     const snapshot = await cached("markets", TTL_MS, loadMarketsSnapshot);
+    /*
+     * On a long-lived server the in-memory cache above does the work. On
+     * serverless each instance is short-lived and starts empty, so the same
+     * stale-while-revalidate behaviour is asked of the CDN, where it is shared
+     * across every visitor and survives instance churn.
+     */
     return NextResponse.json(snapshot, {
-      headers: { "cache-control": "no-store" },
+      headers: { "cache-control": "public, s-maxage=15, stale-while-revalidate=60" },
     });
   } catch (error) {
     return NextResponse.json(

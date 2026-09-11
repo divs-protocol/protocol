@@ -136,7 +136,9 @@ export async function GET(
 
   try {
     const detail = await cached(`market:${ticker}:${span}`, TTL_MS, () => load(ticker, span));
-    return NextResponse.json(detail, { headers: { "cache-control": "no-store" } });
+    return NextResponse.json(detail, {
+      headers: { "cache-control": "public, s-maxage=15, stale-while-revalidate=60" },
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to read the chain" },

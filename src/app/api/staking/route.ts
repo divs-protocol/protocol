@@ -88,7 +88,9 @@ async function load(): Promise<StakingSnapshot> {
 export async function GET() {
   try {
     const snapshot = await cached("staking", TTL_MS, load);
-    return NextResponse.json(snapshot, { headers: { "cache-control": "no-store" } });
+    return NextResponse.json(snapshot, {
+      headers: { "cache-control": "public, s-maxage=15, stale-while-revalidate=60" },
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to read the chain" },
