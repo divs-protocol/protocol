@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { 
@@ -13,6 +13,8 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "rec
 import DocsSection from "./DocsSection";
 import LandingSection from "./LandingSection";
 import MarketsSection from "./MarketsSection";
+import { compact, num, usd, useDepth, useLiveMarkets, useMarketHistory } from "@/lib/live";
+import { tickerColor } from "./ExchangeSection";
 import TradeSection from "./TradeSection";
 import AnalyticsSection from "./AnalyticsSection";
 import ExchangeSection from "./ExchangeSection";
@@ -21,118 +23,6 @@ import { PortfolioView, ActivityView, AccountView, SettingsView } from "./Sideba
 import SupportWidget from "./SupportWidget";
 import Footer from "./Footer";
 import { NavContext } from "./nav";
-
-const STOCKS = [
-  { 
-    ticker: "NVDA", 
-    name: "NVIDIA Corp.", 
-    price: "$124.50", 
-    change: "+4.25%", 
-    isUp: true,
-    svg: (
-      <svg className="w-5 h-5 text-[#10B981]" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-      </svg>
-    )
-  },
-  { 
-    ticker: "AAPL", 
-    name: "Apple Inc.", 
-    price: "$221.10", 
-    change: "-1.80%", 
-    isUp: false,
-    svg: (
-      <svg className="w-5 h-5 text-[#10B981]" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 4.01c.67-.82 1.12-1.96.99-3.11-.97.04-2.15.65-2.85 1.47-.63.73-1.18 1.89-1.03 3.02 1.09.08 2.22-.56 2.89-1.38z"/>
-      </svg>
-    )
-  },
-  { 
-    ticker: "TSLA", 
-    name: "Tesla Inc.", 
-    price: "$214.30", 
-    change: "+6.10%", 
-    isUp: true,
-    svg: (
-      <svg className="w-5 h-5 text-[#10B981]" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 4.5L7 3v2l5 1.5L17 5V3l-5 1.5zM12 2L2 6v12l10 4 10-4V6L12 2z"/>
-      </svg>
-    )
-  },
-  { 
-    ticker: "AMZN", 
-    name: "Amazon.com", 
-    price: "$186.40", 
-    change: "+2.15%", 
-    isUp: true,
-    svg: (
-      <svg className="w-5 h-5 text-[#10B981]" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M3 13h18v-2H3v2zm0-7h18V4H3v2zm0 12h18v-2H3v2z"/>
-      </svg>
-    )
-  },
-  { 
-    ticker: "MSFT", 
-    name: "Microsoft", 
-    price: "$448.20", 
-    change: "+0.85%", 
-    isUp: true,
-    svg: (
-      <svg className="w-5 h-5 text-[#10B981]" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M2 2h9.5v9.5H2V2zm10.5 0H22v9.5h-9.5V2zM2 12.5h9.5V22H2v-9.5zm10.5 0H22V22h-9.5v-9.5z"/>
-      </svg>
-    )
-  },
-  { 
-    ticker: "GOOGL", 
-    name: "Alphabet Inc.", 
-    price: "$178.35", 
-    change: "-0.45%", 
-    isUp: false,
-    svg: (
-      <svg className="w-5 h-5 text-[#10B981]" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.761H12.545z"/>
-      </svg>
-    )
-  }
-];
-
-const CHART_DATA = [
-  { day: "Mon", price: 32000 },
-  { day: "Tue", price: 34000 },
-  { day: "Wed", price: 31000 },
-  { day: "Thu", price: 36000 },
-  { day: "Fri", price: 42000 },
-  { day: "Sat", price: 40000 },
-  { day: "Sun", price: 48000 },
-  { day: "Mon", price: 45000 },
-  { day: "Tue", price: 54000 },
-  { day: "Wed", price: 50000 },
-  { day: "Thu", price: 58000 },
-];
-
-const ORDER_BOOK = Array.from({ length: 8 }, (_, i) => ({
-  id: `ob-${i}`,
-  buyPrice: "124.50",
-  buySize: "16.00",
-  buySum: "110.06M",
-  sellSize: "16.00",
-  sellSum: "110.06M",
-  sellPrice: "124.50",
-}));
-
-const CREATE_ORDERS = Array.from({ length: 8 }, (_, i) => ({
-  id: `co-${i}`,
-  price: "124.50",
-  amount: "0.012 (NVDA)",
-}));
-
-const MY_ORDERS = Array.from({ length: 8 }, (_, i) => ({
-  id: `mo-${i}`,
-  price: "$124.50",
-  amount: "0.268 NVDA",
-  total: "$124.50",
-}));
 
 /**
  * The sidebar is the account side of the app; the header row above it is the
@@ -162,8 +52,44 @@ export default function AppShell({ section }: { section: string }) {
   const { connect, connectors } = useConnect();
   const injectedConnector = connectors[0];
   const { disconnect } = useDisconnect();
-  const [selectedStock, setSelectedStock] = useState(STOCKS[0]);
+  /*
+   * The dashboard reads the same snapshot every other section does. It used to
+   * be six hardcoded tickers, a chart whose axis ran to 60,000 for a $124
+   * stock, and eight identical order-book rows.
+   */
+  const { markets, ethUsd, window: win } = useLiveMarkets();
+  const [ticker, setTicker] = useState("NVDA");
   const [orderType, setOrderType] = useState("limit");
+  const [limitPrice, setLimitPrice] = useState("");
+  const [orderAmount, setOrderAmount] = useState("1");
+
+  const selected = markets.find((m) => m.ticker === ticker) ?? markets[0];
+  const book = useDepth(selected, ethUsd, 8);
+  const { candles, trades } = useMarketHistory(selected?.ticker, "1h");
+
+  // The strip leads with whatever is actually trading.
+  const strip = useMemo(
+    () => markets.slice().sort((a, b) => b.volume - a.volume).slice(0, 6),
+    [markets],
+  );
+
+  const chart = useMemo(
+    () =>
+      candles.map((c) => ({
+        t: new Date(c.t * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
+        price: c.price,
+      })),
+    [candles],
+  );
+
+  const largest = useMemo(
+    () => trades.slice().sort((a, b) => b.value - a.value).slice(0, 8),
+    [trades],
+  );
+
+  const orderTotal =
+    (Number(orderAmount) || 0) *
+    (orderType === "market" ? (selected?.price ?? 0) : Number(limitPrice) || selected?.price || 0);
 
   return (
     <NavContext.Provider value={setActiveSection}>
@@ -364,77 +290,121 @@ export default function AppShell({ section }: { section: string }) {
               <>
 
                 <div className="flex space-x-2.5 overflow-x-auto pb-1 scrollbar-none">
-                  {STOCKS.map((stock) => (
-                    <div 
-                      key={stock.ticker}
-                      onClick={() => setSelectedStock(stock)}
-                      className={`flex items-center space-x-3 bg-[#1B1E24] border px-3 py-2 rounded-xl min-w-[170px] cursor-pointer transition ${
-                        selectedStock.ticker === stock.ticker ? "border-[#10B981] bg-[#1F232C]" : "border-[#232730] hover:border-gray-700"
-                      }`}
-                    >
-                      <div className="w-8 h-8 bg-[#14161B] border border-[#232730] rounded-lg flex items-center justify-center">
-                        {stock.svg}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-center">
-                          <span className="text-white font-bold text-xs">{stock.ticker}</span>
-                          <span className="text-gray-300 text-[11px] font-medium">{stock.price}</span>
+                  {strip.map((m) => {
+                    const up = m.change >= 0;
+                    const c = tickerColor(m.ticker);
+                    return (
+                      <div
+                        key={m.ticker}
+                        onClick={() => setTicker(m.ticker)}
+                        className={`flex items-center space-x-3 bg-[#1B1E24] border px-3 py-2 rounded-xl min-w-[170px] cursor-pointer transition ${
+                          ticker === m.ticker ? "border-[#10B981] bg-[#1F232C]" : "border-[#232730] hover:border-gray-700"
+                        }`}
+                      >
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                          style={{ background: c.bg, border: `1px solid ${c.border}`, color: c.fg }}
+                        >
+                          {m.ticker.slice(0, 2)}
                         </div>
-                        <div className="flex justify-between items-center mt-0.5">
-                          <span className="text-[9px] text-gray-500 truncate">{stock.name}</span>
-                          <span className={`text-[9px] font-semibold flex items-center ${stock.isUp ? "text-[#10B981]" : "text-red-400"}`}>
-                            {stock.isUp ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
-                            {stock.change}
-                          </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-center">
+                            <span className="text-white font-bold text-xs">{m.ticker}</span>
+                            <span className="text-gray-300 text-[11px] font-medium">{usd(m.price)}</span>
+                          </div>
+                          <div className="flex justify-between items-center mt-0.5">
+                            <span className="text-[9px] text-gray-500 truncate">{m.name}</span>
+                            <span className={`text-[9px] font-semibold flex items-center ${up ? "text-[#10B981]" : "text-red-400"}`}>
+                              {up ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
+                              {m.change.toFixed(2)}%
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <div className="grid grid-cols-12 gap-3">
                   <div className="col-span-8 bg-[#1B1E24] border border-[#232730] rounded-2xl p-4 flex flex-col justify-between">
                     <div className="flex justify-between items-start">
                       <div className="flex items-center space-x-3">
-                        <div className="w-9 h-9 bg-[#14161B] border border-[#232730] rounded-xl flex items-center justify-center">
-                          {selectedStock.svg}
+                        <div
+                          className="w-9 h-9 rounded-xl flex items-center justify-center text-[11px] font-bold"
+                          style={{
+                            background: tickerColor(selected?.ticker ?? "").bg,
+                            border: `1px solid ${tickerColor(selected?.ticker ?? "").border}`,
+                            color: tickerColor(selected?.ticker ?? "").fg,
+                          }}
+                        >
+                          {(selected?.ticker ?? "").slice(0, 2)}
                         </div>
                         <div>
                           <div className="flex items-center space-x-2">
-                            <h2 className="text-white font-bold text-sm">{selectedStock.name}</h2>
-                            <span className="px-1.5 py-0.5 bg-[#10B981]/20 text-[#10B981] rounded text-[9px] font-bold">{selectedStock.change}</span>
+                            <h2 className="text-white font-bold text-sm">{selected?.name}</h2>
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                (selected?.change ?? 0) >= 0
+                                  ? "bg-[#10B981]/20 text-[#10B981]"
+                                  : "bg-red-500/20 text-red-400"
+                              }`}
+                            >
+                              {(selected?.change ?? 0) >= 0 ? "+" : ""}
+                              {(selected?.change ?? 0).toFixed(2)}%
+                            </span>
                           </div>
-                          <span className="text-lg font-extrabold text-white">{selectedStock.price}</span>
+                          <span className="text-lg font-extrabold text-white">{usd(selected?.price ?? 0)}</span>
                         </div>
                       </div>
 
                       <div className="flex space-x-4 text-right">
                         <div>
-                          <div className="text-[9px] text-gray-500">24H Movement</div>
-                          <div className="text-white font-semibold text-xs">+$64,654.88</div>
+                          <div className="text-[9px] text-gray-500">{win} trades</div>
+                          <div className="text-white font-semibold text-xs">{num(selected?.txns ?? 0)}</div>
                         </div>
                         <div>
-                          <div className="text-[9px] text-gray-500">24H Volume</div>
-                          <div className="text-white font-semibold text-xs">$64,654.88</div>
+                          <div className="text-[9px] text-gray-500">{win} volume</div>
+                          <div className="text-white font-semibold text-xs">{compact(selected?.volume ?? 0)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[9px] text-gray-500">Liquidity</div>
+                          <div className="text-white font-semibold text-xs">{compact(selected?.tvl ?? 0)}</div>
                         </div>
                       </div>
                     </div>
 
                     <div className="h-56 mt-3 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={CHART_DATA}>
-                          <defs>
-                            <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#10B981" stopOpacity={0.35}/>
-                              <stop offset="95%" stopColor="#10B981" stopOpacity={0.0}/>
-                            </linearGradient>
-                          </defs>
-                          <XAxis dataKey="day" stroke="#3A3F4D" tickLine={false} axisLine={false} />
-                          <YAxis stroke="#3A3F4D" tickLine={false} axisLine={false} orientation="right" />
-                          <Tooltip contentStyle={{ backgroundColor: "#14161B", borderColor: "#232730", color: "#fff" }} />
-                          <Area type="monotone" dataKey="price" stroke="#10B981" strokeWidth={2} fillOpacity={1} fill="url(#colorPrice)" />
-                        </AreaChart>
-                      </ResponsiveContainer>
+                      {chart.length > 1 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={chart}>
+                            <defs>
+                              <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#10B981" stopOpacity={0.35}/>
+                                <stop offset="95%" stopColor="#10B981" stopOpacity={0.0}/>
+                              </linearGradient>
+                            </defs>
+                            <XAxis dataKey="t" stroke="#3A3F4D" tickLine={false} axisLine={false} minTickGap={40} tick={{ fontSize: 10 }} />
+                            <YAxis
+                              stroke="#3A3F4D"
+                              tickLine={false}
+                              axisLine={false}
+                              orientation="right"
+                              domain={["dataMin", "dataMax"]}
+                              tick={{ fontSize: 10 }}
+                              tickFormatter={(v: number) => usd(v, 2)}
+                            />
+                            <Tooltip
+                              contentStyle={{ backgroundColor: "#14161B", borderColor: "#232730", color: "#fff" }}
+                              formatter={(v) => [usd(Number(v)), "Price"] as [string, string]}
+                            />
+                            <Area type="monotone" dataKey="price" stroke="#10B981" strokeWidth={2} fillOpacity={1} fill="url(#colorPrice)" />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-[11px] text-gray-600">
+                          Reading swaps…
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -449,16 +419,34 @@ export default function AppShell({ section }: { section: string }) {
 
                       <div className="flex items-center justify-between bg-[#14161B] border border-[#232730] p-2 rounded-xl mb-3">
                         <div className="flex items-center space-x-2">
-                          <div className="w-5 h-5">{selectedStock.svg}</div>
-                          <span className="text-white font-bold">{selectedStock.ticker}</span>
+                          <span
+                            className="w-5 h-5 rounded text-[8px] font-bold flex items-center justify-center"
+                            style={{
+                              background: tickerColor(selected?.ticker ?? "").bg,
+                              color: tickerColor(selected?.ticker ?? "").fg,
+                            }}
+                          >
+                            {(selected?.ticker ?? "").slice(0, 2)}
+                          </span>
+                          <span className="text-white font-bold">{selected?.ticker}</span>
                         </div>
-                        <span className="text-[10px] text-gray-400">1 {selectedStock.ticker} = {selectedStock.price}</span>
+                        <span className="text-[10px] text-gray-400">
+                          1 {selected?.ticker} = {usd(selected?.price ?? 0)}
+                        </span>
                       </div>
 
                       <div className="mb-2.5">
-                        <label className="text-[9px] text-gray-500 block mb-1">Price Limit</label>
+                        <label className="text-[9px] text-gray-500 block mb-1">
+                          {orderType === "market" ? "Market price" : "Price Limit"}
+                        </label>
                         <div className="relative">
-                          <input type="text" defaultValue="65,173" className="w-full bg-[#14161B] border border-[#232730] rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-[#10B981]" />
+                          <input
+                            value={orderType === "market" ? (selected?.price ?? 0).toFixed(2) : limitPrice}
+                            onChange={(e) => setLimitPrice(e.target.value.replace(/[^0-9.]/g, ""))}
+                            readOnly={orderType === "market"}
+                            inputMode="decimal"
+                            className="w-full bg-[#14161B] border border-[#232730] rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-[#10B981] read-only:text-gray-400"
+                          />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#10B981] font-bold">$</span>
                         </div>
                       </div>
@@ -466,8 +454,13 @@ export default function AppShell({ section }: { section: string }) {
                       <div className="mb-3">
                         <label className="text-[9px] text-gray-500 block mb-1">Amount</label>
                         <div className="relative">
-                          <input type="text" defaultValue="1" className="w-full bg-[#14161B] border border-[#232730] rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-[#10B981]" />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-medium">{selectedStock.ticker}</span>
+                          <input
+                            value={orderAmount}
+                            onChange={(e) => setOrderAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                            inputMode="decimal"
+                            className="w-full bg-[#14161B] border border-[#232730] rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-[#10B981]"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-medium">{selected?.ticker}</span>
                         </div>
                       </div>
                     </div>
@@ -475,18 +468,13 @@ export default function AppShell({ section }: { section: string }) {
                     <div>
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-gray-400 text-xs">Total:</span>
-                        <span className="text-[#10B981] font-extrabold text-sm">$65,173</span>
+                        <span className="text-[#10B981] font-extrabold text-sm">{usd(orderTotal)}</span>
                       </div>
                       <button
                         onClick={() =>
                           !isConnected && injectedConnector && connect({ connector: injectedConnector })
                         }
                         disabled={isConnected}
-                        title={
-                          isConnected
-                            ? "Trading opens when the launchpad is deployed"
-                            : undefined
-                        }
                         className="w-full bg-[#10B981] hover:bg-[#0EA372] disabled:opacity-40 disabled:cursor-not-allowed text-black font-extrabold py-2 rounded-xl transition"
                       >
                         {isConnected ? "Place Order" : "Connect Wallet"}
@@ -497,26 +485,39 @@ export default function AppShell({ section }: { section: string }) {
 
                 <div className="grid grid-cols-12 gap-3">
                   <div className="col-span-6 bg-[#1B1E24] border border-[#232730] rounded-2xl p-3.5">
-                    <h3 className="text-white font-bold mb-2">Order Book</h3>
+                    <div className="flex justify-between items-center mb-2">
+                      <h3 className="text-white font-bold">Depth</h3>
+                      <span className="font-mono text-[9px] text-gray-500">
+                        spread {book.spread.toFixed(book.decimals)} · {book.spreadPct.toFixed(3)}%
+                      </span>
+                    </div>
                     <div className="grid grid-cols-6 text-[9px] text-gray-500 mb-2 border-b border-[#232730] pb-1">
-                      <span>Price (USDT)</span>
-                      <span>Size ({selectedStock.ticker})</span>
-                      <span>Sum ({selectedStock.ticker})</span>
-                      <span>Size ({selectedStock.ticker})</span>
-                      <span>Sum ({selectedStock.ticker})</span>
-                      <span className="text-right">Price (USDT)</span>
+                      <span>Bid</span>
+                      <span>Size ({selected?.ticker})</span>
+                      <span>Sum ({selected?.ticker})</span>
+                      <span>Size ({selected?.ticker})</span>
+                      <span>Sum ({selected?.ticker})</span>
+                      <span className="text-right">Ask</span>
                     </div>
                     <div className="space-y-1 font-mono text-[10px]">
-                      {ORDER_BOOK.map((item) => (
-                        <div key={item.id} className="grid grid-cols-6 items-center">
-                          <span className="text-[#10B981] font-semibold">${item.buyPrice}</span>
-                          <span className="text-gray-300">{item.buySize}</span>
-                          <span className="text-gray-500">{item.buySum}</span>
-                          <span className="text-gray-300">{item.sellSize}</span>
-                          <span className="text-gray-500">{item.sellSum}</span>
-                          <span className="text-red-400 font-semibold text-right">${item.sellPrice}</span>
-                        </div>
-                      ))}
+                      {book.bids.map((bid, i) => {
+                        const ask = book.asks[i];
+                        return (
+                          <div key={`d${i}`} className="grid grid-cols-6 items-center">
+                            <span className="text-[#10B981] font-semibold">{bid.price.toFixed(book.decimals)}</span>
+                            <span className="text-gray-300">{num(bid.size, 2)}</span>
+                            <span className="text-gray-500">{num(bid.cum, 2)}</span>
+                            <span className="text-gray-300">{ask ? num(ask.size, 2) : "—"}</span>
+                            <span className="text-gray-500">{ask ? num(ask.cum, 2) : "—"}</span>
+                            <span className="text-red-400 font-semibold text-right">
+                              {ask ? ask.price.toFixed(book.decimals) : "—"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {book.bids.length === 0 && (
+                        <div className="py-6 text-center text-gray-600">Reading the pool…</div>
+                      )}
                     </div>
                   </div>
 
@@ -527,28 +528,48 @@ export default function AppShell({ section }: { section: string }) {
                       <span>Amount</span>
                     </div>
                     <div className="space-y-1.5 font-mono text-[10px]">
-                      {CREATE_ORDERS.map((item) => (
-                        <div key={item.id} className="flex justify-between items-center">
-                          <span className="text-[#10B981] font-semibold">${item.price}</span>
-                          <span className="text-gray-300">{item.amount}</span>
+                      {trades.slice(0, 9).map((t, i) => (
+                        <div key={`${t.hash}-${i}`} className="flex justify-between items-center">
+                          <span className={`font-semibold ${t.side === "buy" ? "text-[#10B981]" : "text-red-400"}`}>
+                            {usd(t.price)}
+                          </span>
+                          <span className="text-gray-300">
+                            {num(t.shares, 3)} <span className="text-gray-600">({selected?.ticker})</span>
+                          </span>
                         </div>
                       ))}
+                      {trades.length === 0 && (
+                        <div className="py-6 text-center text-gray-600">Reading swaps…</div>
+                      )}
                     </div>
                   </div>
 
                   <div className="col-span-3 bg-[#1B1E24] border border-[#232730] rounded-2xl p-3.5">
                     <div className="flex justify-between items-center mb-2">
-                      <h3 className="text-white font-bold">Market Activity</h3>
-                      <button className="text-[9px] text-[#10B981] hover:underline font-semibold">View all</button>
+                      <h3 className="text-white font-bold">Largest Trades</h3>
+                      <button
+                        onClick={() => setActiveSection("markets")}
+                        className="text-[9px] text-[#10B981] hover:underline font-semibold"
+                      >
+                        View all
+                      </button>
                     </div>
                     <div className="space-y-1.5 font-mono text-[10px]">
-                      {MY_ORDERS.map((item) => (
-                        <div key={item.id} className="flex justify-between items-center bg-[#14161B] px-2 py-1 rounded-lg border border-[#232730]">
-                          <span className="text-[#10B981] font-bold">{item.price}</span>
-                          <span className="text-gray-300 text-[9px]">{item.amount}</span>
-                          <span className="text-gray-400 text-[9px]">{item.total}</span>
+                      {largest.map((t, i) => (
+                        <div
+                          key={`${t.hash}-l${i}`}
+                          className="flex justify-between items-center bg-[#14161B] px-2 py-1 rounded-lg border border-[#232730]"
+                        >
+                          <span className={`font-bold ${t.side === "buy" ? "text-[#10B981]" : "text-red-400"}`}>
+                            {usd(t.price)}
+                          </span>
+                          <span className="text-gray-300 text-[9px]">{num(t.shares, 2)}</span>
+                          <span className="text-gray-400 text-[9px]">{usd(t.value)}</span>
                         </div>
                       ))}
+                      {largest.length === 0 && (
+                        <div className="py-6 text-center text-gray-600">Reading swaps…</div>
+                      )}
                     </div>
                   </div>
                 </div>
