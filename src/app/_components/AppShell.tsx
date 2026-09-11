@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { 
   BarChart2, Layers, Wallet, ClipboardList, User, 
-  Zap, Headphones, Settings, BookOpen, 
+  Headphones, Settings, BookOpen, 
   Search, Bell, ArrowUpRight, ArrowDownRight, ChevronDown
 } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
@@ -134,9 +134,13 @@ const MY_ORDERS = Array.from({ length: 8 }, (_, i) => ({
   total: "$124.50",
 }));
 
+/**
+ * The sidebar is the account side of the app; the header row above it is the
+ * product. Nothing appears in both - "Swap" used to sit here pointing at the
+ * exchange route, which lit two nav items up for one page.
+ */
 const NAV_ITEMS = [
   { id: "home", icon: BarChart2, label: "Pools" },
-  { id: "exchange", icon: Zap, label: "Swap" },
   { id: "stake", icon: Layers, label: "Stakes" },
   { id: "portfolio", icon: Wallet, label: "Portfolio" },
   { id: "activity", icon: ClipboardList, label: "Activity" },
