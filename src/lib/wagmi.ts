@@ -32,11 +32,28 @@ const sharedOptions = {
  */
 const robinhoodRpcUrl = process.env.NEXT_PUBLIC_ROBINHOOD_RPC_URL;
 
+/**
+ * In the browser every read goes through `/api/rpc`. The public endpoint sends
+ * `Access-Control-Allow-Origin` twice, which browsers reject outright, so a
+ * direct transport returns nothing and the whole UI renders empty. On the
+ * server there is no CORS, so the chain is called directly.
+ *
+ * Requests are batched into one HTTP call each tick. Seventeen markets read
+ * one at a time is a burst the public endpoint answers with 429.
+ *
+ * `http(undefined, ...)` is deliberate: viem falls back to the chain's default
+ * RPC only when the url is undefined, and there is no overload that takes
+ * options without it.
+ */
+const robinhoodTransport =
+  typeof window === "undefined"
+    ? robinhoodRpcUrl
+      ? http(robinhoodRpcUrl, { batch: true })
+      : http(undefined, { batch: true })
+    : http("/api/rpc", { batch: true });
+
 const remoteTransports = {
-  // Passing an explicit `undefined` url is not the same as omitting it - the
-  // transport is built with no endpoint instead of falling back to the chain's
-  // default RPC, and reads then fail without ever hitting the network.
-  [robinhood.id]: robinhoodRpcUrl ? http(robinhoodRpcUrl) : http(),
+  [robinhood.id]: robinhoodTransport,
 } as const;
 
 export const config = includeLocalChain
