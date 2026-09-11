@@ -4,8 +4,8 @@ import Image from "next/image";
 import { useState } from "react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { 
-  BarChart2, Layers, Wallet, ClipboardList, Mail, User, 
-  Zap, Briefcase, ShoppingBag, Headphones, Settings, BookOpen, 
+  BarChart2, Layers, Wallet, ClipboardList, User, 
+  Zap, Headphones, Settings, BookOpen, 
   Search, Bell, ArrowUpRight, ArrowDownRight, ChevronDown
 } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
@@ -16,7 +16,7 @@ import TradeSection from "./_components/TradeSection";
 import AnalyticsSection from "./_components/AnalyticsSection";
 import ExchangeSection from "./_components/ExchangeSection";
 import StakeSection from "./_components/StakeSection";
-import ConnectPrompt from "./_components/ConnectPrompt";
+import { PortfolioView, ActivityView, AccountView, SettingsView } from "./_components/SidebarViews";
 import Footer from "./_components/Footer";
 import { NavContext } from "./_components/nav";
 
@@ -109,12 +109,6 @@ const CHART_DATA = [
   { day: "Thu", price: 58000 },
 ];
 
-const POSITIONS_DATA = [
-  { id: "#4812", pool: "WETH / NVDA", value: "$4,250.00", share: "1.2%", reward: "0.042 WETH", status: "Active" },
-  { id: "#3901", pool: "WETH / DELTA", value: "$12,800.50", share: "3.8%", reward: "0.185 WETH", status: "Active" },
-  { id: "#2109", pool: "WETH / TSLA", value: "$1,120.00", share: "0.4%", reward: "0.009 WETH", status: "Paused" },
-];
-
 const ORDER_BOOK = Array.from({ length: 8 }, (_, i) => ({
   id: `ob-${i}`,
   buyPrice: "124.50",
@@ -140,14 +134,11 @@ const MY_ORDERS = Array.from({ length: 8 }, (_, i) => ({
 
 const NAV_ITEMS = [
   { id: "pools", icon: BarChart2, label: "Pools" },
+  { id: "exchange", icon: Zap, label: "Swap" },
   { id: "stakes", icon: Layers, label: "Stakes" },
-  { id: "positions", icon: Wallet, label: "Positions" },
-  { id: "orders", icon: ClipboardList, label: "Orders" },
-  { id: "messages", icon: Mail, label: "Messages" },
+  { id: "positions", icon: Wallet, label: "Portfolio" },
+  { id: "orders", icon: ClipboardList, label: "Activity" },
   { id: "account", icon: User, label: "Account" },
-  { id: "swap", icon: Zap, label: "Swap" },
-  { id: "vaults", icon: Briefcase, label: "Vaults" },
-  { id: "store", icon: ShoppingBag, label: "Store" },
 ];
 
 export default function Home() {
@@ -193,11 +184,22 @@ export default function Home() {
 
           {/* Bottom Icons */}
           <div className="flex flex-col items-start space-y-2 w-full pt-4 border-t border-[#1F2228]">
-            <button className="w-full flex items-center space-x-3 p-2.5 rounded-xl hover:bg-[#1F2228] text-gray-400 hover:text-white transition">
+            <button
+              onClick={() => setActiveSection("exchange")}
+              className="w-full flex items-center space-x-3 p-2.5 rounded-xl hover:bg-[#1F2228] text-gray-400 hover:text-white transition"
+              title="Questions and answers"
+            >
               <Headphones size={18} className="flex-shrink-0" />
               <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-xs font-medium whitespace-nowrap overflow-hidden">Support</span>
             </button>
-            <button className="w-full flex items-center space-x-3 p-2.5 rounded-xl hover:bg-[#1F2228] text-gray-400 hover:text-white transition">
+            <button
+              onClick={() => setActiveSection("settings")}
+              className={`w-full flex items-center space-x-3 p-2.5 rounded-xl transition ${
+                activeSection === "settings"
+                  ? "bg-[#10B981] text-black font-bold shadow-md"
+                  : "hover:bg-[#1F2228] text-gray-400 hover:text-white"
+              }`}
+            >
               <Settings size={18} className="flex-shrink-0" />
               <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-xs font-medium whitespace-nowrap overflow-hidden">Settings</span>
             </button>
@@ -527,54 +529,13 @@ export default function Home() {
             {activeSection === "stakes" && <StakeSection />}
 
             {/* 3. POSITIONS VIEW */}
-            {activeSection === "positions" && !isConnected && <ConnectPrompt what="Your positions" />}
+            {activeSection === "positions" && <PortfolioView />}
 
-            {activeSection === "positions" && isConnected && (
-              <div className="bg-[#1B1E24] border border-[#232730] rounded-2xl p-5 space-y-4">
-                <h1 className="text-white font-bold text-base mb-1">Your Positions</h1>
-                <p className="text-gray-400 text-xs mb-4">Manage active liquidity positions and claimed rewards across active pools.</p>
+            {activeSection === "orders" && <ActivityView />}
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left font-mono">
-                    <thead>
-                      <tr className="border-b border-[#232730] text-gray-500 text-[10px] uppercase">
-                        <th className="pb-2">Position ID</th>
-                        <th className="pb-2">Pool</th>
-                        <th className="pb-2">Total Value</th>
-                        <th className="pb-2">Pool Share</th>
-                        <th className="pb-2">Unclaimed Rewards</th>
-                        <th className="pb-2">Status</th>
-                        <th className="pb-2 text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#232730]">
-                      {POSITIONS_DATA.map((pos, idx) => (
-                        <tr key={idx} className="hover:bg-[#14161B] transition">
-                          <td className="py-3 text-[#10B981] font-bold">{pos.id}</td>
-                          <td className="py-3 text-white font-bold">{pos.pool}</td>
-                          <td className="py-3 text-gray-300">{pos.value}</td>
-                          <td className="py-3 text-gray-300">{pos.share}</td>
-                          <td className="py-3 text-[#10B981]">{pos.reward}</td>
-                          <td className="py-3">
-                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${pos.status === "Active" ? "bg-[#10B981]/20 text-[#10B981]" : "bg-yellow-500/20 text-yellow-400"}`}>
-                              {pos.status}
-                            </span>
-                          </td>
-                          <td className="py-3 text-right space-x-2">
-                            <button className="px-3 py-1 bg-[#10B981] text-black font-bold rounded-lg text-xs hover:bg-[#0EA5E9] transition">
-                              Claim
-                            </button>
-                            <button className="px-3 py-1 bg-[#14161B] border border-[#232730] text-gray-300 hover:text-white font-bold rounded-lg text-xs transition">
-                              Withdraw
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+            {activeSection === "account" && <AccountView />}
+
+            {activeSection === "settings" && <SettingsView />}
 
             {activeSection === "protocol" && <LandingSection />}
 
@@ -588,7 +549,7 @@ export default function Home() {
 
             {activeSection === "docs" && <DocsSection />}
 
-            {!["protocol", "markets", "trade", "analytics", "exchange", "pools", "stakes", "positions", "docs"].includes(activeSection) && (
+            {!["protocol", "markets", "trade", "analytics", "exchange", "pools", "stakes", "positions", "orders", "account", "settings", "docs"].includes(activeSection) && (
               <div className="h-full flex flex-col items-center justify-center bg-[#1B1E24] border border-[#232730] rounded-2xl p-8 text-center min-h-[400px]">
                 <div className="w-12 h-12 bg-[#10B981]/10 border border-[#10B981]/30 text-[#10B981] rounded-2xl flex items-center justify-center mb-3">
                   {NAV_ITEMS.find((n) => n.id === activeSection)?.icon && (
