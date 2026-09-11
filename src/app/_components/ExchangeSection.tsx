@@ -614,29 +614,34 @@ function Products({ onNavigate, onTrade }: { onNavigate: (s: string) => void; on
     ["Account", "Wallet, network and balance, with the explorer a click away.", () => onNavigate("account")],
   ];
 
+  /*
+   * This row runs wider than the rest of the page on purpose. Eight tiles
+   * inside the 1024px column come out barely wider than their own text; the
+   * grid is meant to read as a directory spanning the page.
+   */
   return (
-    <section className="px-1 py-12 md:py-16">
-      <Container>
-        <h2 className="text-white font-bold tracking-tight text-2xl md:text-4xl text-center mb-10">
+    <section className="py-16 md:py-24">
+      <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-8 lg:px-12">
+        <h2 className="text-white font-bold tracking-tight text-3xl md:text-[40px] text-center mb-12">
           Discover more products
         </h2>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {items.map(([title, body, go]) => (
             <button
               key={title}
               onClick={go}
-              className="bg-[#14161B] border border-[#232730] hover:border-[#10B981]/40 rounded-2xl p-6 text-left transition group flex flex-col min-h-[220px]"
+              className="bg-[#14161B] border border-[#232730] hover:border-[#10B981]/40 rounded-2xl p-7 text-left transition group flex flex-col min-h-[260px]"
             >
-              <h3 className="text-white font-bold text-xl mb-3 tracking-tight">{title}</h3>
-              <p className="text-[13px] leading-[1.65] text-gray-400">{body}</p>
+              <h3 className="text-white font-bold text-[22px] mb-3.5 tracking-tight">{title}</h3>
+              <p className="text-[14px] leading-[1.7] text-gray-400">{body}</p>
               <ArrowRight
-                size={16}
-                className="text-gray-600 group-hover:text-[#10B981] group-hover:translate-x-0.5 transition mt-auto pt-6"
+                size={18}
+                className="text-gray-600 group-hover:text-[#10B981] group-hover:translate-x-0.5 transition mt-auto pt-8"
               />
             </button>
           ))}
         </div>
-      </Container>
+      </div>
     </section>
   );
 }
