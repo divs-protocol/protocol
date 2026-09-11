@@ -45,12 +45,19 @@ const robinhoodRpcUrl = process.env.NEXT_PUBLIC_ROBINHOOD_RPC_URL;
  * RPC only when the url is undefined, and there is no overload that takes
  * options without it.
  */
+/**
+ * 30s, not viem's default 10s. A `getLogs` over tens of thousands of blocks
+ * takes seconds upstream and may queue behind other calls in the proxy; at the
+ * default it was aborted mid-flight and the flow columns silently stayed empty.
+ */
+const transportOptions = { batch: true, timeout: 30_000 } as const;
+
 const robinhoodTransport =
   typeof window === "undefined"
     ? robinhoodRpcUrl
-      ? http(robinhoodRpcUrl, { batch: true })
-      : http(undefined, { batch: true })
-    : http("/api/rpc", { batch: true });
+      ? http(robinhoodRpcUrl, transportOptions)
+      : http(undefined, transportOptions)
+    : http("/api/rpc", transportOptions);
 
 const remoteTransports = {
   [robinhood.id]: robinhoodTransport,

@@ -4,21 +4,27 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, ExternalLink, Copy, Check } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
 import {
-  type Market,
-  type Timeframe,
-  TIMEFRAMES,
-  priceSeries,
-  transactions,
-  flowSummary,
-  usd,
+  HISTORY_SPANS,
+  type HistorySpan,
+  type LiveMarket,
+  ago,
   compact,
   num,
   shortAddr,
-  ago,
-} from "@/lib/markets";
+  usd,
+  useMarketHistory,
+} from "@/lib/live";
 import Footer from "./Footer";
 
-/** One market in depth: chart, order flow, and the tape. */
+/**
+ * One market in depth: chart, order flow and the tape.
+ *
+ * The tape is the pool's own `Swap` log, decoded. Side comes from the sign of
+ * the WETH leg, size from the share leg, and the trader is the swap recipient -
+ * for a router trade that is the wallet the shares were delivered to.
+ */
+
+const EXPLORER = "https://robinhoodchain.blockscout.com";
 
 function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
@@ -29,7 +35,7 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
   );
 }
 
-function TradePanel({ market }: { market: Market }) {
+function TradePanel({ market }: { market: LiveMarket }) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("1");
 
@@ -90,8 +96,8 @@ function TradePanel({ market }: { market: Market }) {
           <span className="font-mono text-white">{usd(total)}</span>
         </div>
         <div className="flex justify-between pt-2 border-t border-[#232730]">
-          <span className="text-gray-500">Fee to stakers</span>
-          <span className="font-mono text-[#10B981]">{usd(total * 0.003)}</span>
+          <span className="text-gray-500">Pool fee ({(market.feeBps / 10_000).toFixed(2)}%)</span>
+          <span className="font-mono text-[#10B981]">{usd((total * market.feeBps) / 1_000_000)}</span>
         </div>
       </div>
 
@@ -106,27 +112,67 @@ function TradePanel({ market }: { market: Market }) {
   );
 }
 
-export default function TokenPage({ market, onBack }: { market: Market; onBack: () => void }) {
-  const [tf, setTf] = useState<Timeframe>("24H");
+export default function TokenPage({
+  market,
+  onBack,
+}: {
+  market: LiveMarket;
+  onBack: () => void;
+}) {
+  const [span, setSpan] = useState<HistorySpan>("1h");
   const [tab, setTab] = useState<"all" | "buys" | "sells">("all");
   const [copied, setCopied] = useState(false);
 
-  const series = useMemo(() => priceSeries(market, tf), [market, tf]);
-  const txns = useMemo(() => transactions(market), [market]);
-  const flow = useMemo(() => flowSummary(txns), [txns]);
+  const {
+    trades,
+    candles,
+    window: win,
+    buys,
+    sells,
+    buyVolume,
+    sellVolume,
+    loading,
+  } = useMarketHistory(market.ticker, span);
 
   const visible = useMemo(
-    () => (tab === "all" ? txns : txns.filter((t) => (tab === "buys" ? t.side === "buy" : t.side === "sell"))),
-    [txns, tab],
+    () =>
+      tab === "all"
+        ? trades
+        : trades.filter((t) => (tab === "buys" ? t.side === "buy" : t.side === "sell")),
+    [trades, tab],
   );
 
-  const up = market.change24h >= 0;
+  // Counts and volumes cover the whole window; the tape below is capped, so
+  // these cannot be recomputed from the rows on screen.
+  const flow = useMemo(
+    () => ({
+      buys,
+      sells,
+      buyVol: buyVolume,
+      sellVol: sellVolume,
+      buyShare: buyVolume + sellVolume ? buyVolume / (buyVolume + sellVolume) : 0.5,
+    }),
+    [buys, sells, buyVolume, sellVolume],
+  );
+
+  const chart = useMemo(
+    () =>
+      candles.map((c) => ({
+        t: new Date(c.t * 1000).toLocaleTimeString(undefined, {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        price: c.price,
+      })),
+    [candles],
+  );
+
+  const up = market.change >= 0;
   const stroke = up ? "#10B981" : "#F87171";
-  const address = `0x${market.ticker.toLowerCase().padEnd(6, "0")}9a4c1f${market.ticker.length}b7e2d8c05a3f6119e4`.slice(0, 42);
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(address);
+      await navigator.clipboard.writeText(market.token);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -154,14 +200,8 @@ export default function TokenPage({ market, onBack }: { market: Market; onBack: 
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-white font-bold text-lg tracking-tight">{market.ticker}</h2>
-                <span
-                  className={`px-2 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wide ${
-                    market.listing === "pool"
-                      ? "bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/25"
-                      : "bg-amber-500/10 text-amber-400 border border-amber-500/25"
-                  }`}
-                >
-                  {market.listing === "pool" ? "Pool" : "Curve"}
+                <span className="px-2 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wide bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/25">
+                  {(market.feeBps / 10_000).toFixed(2)}% pool
                 </span>
               </div>
               <div className="text-[11px] text-gray-500">{market.name}</div>
@@ -172,14 +212,14 @@ export default function TokenPage({ market, onBack }: { market: Market; onBack: 
             <div className="font-mono text-2xl text-white leading-none">{usd(market.price)}</div>
             <div className={`font-mono text-xs mt-1.5 ${up ? "text-[#10B981]" : "text-red-400"}`}>
               {up ? "+" : ""}
-              {market.change24h.toFixed(2)}% 24h
+              {market.change.toFixed(2)}% {win || "…"}
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2 mt-4 pt-4 border-t border-[#232730]">
-          <span className="text-[10px] text-gray-500 flex-shrink-0">Contract</span>
-          <code className="font-mono text-[10px] text-gray-400 truncate">{address}</code>
+          <span className="text-[10px] text-gray-500 flex-shrink-0">Token</span>
+          <code className="font-mono text-[10px] text-gray-400 truncate">{market.token}</code>
           <button
             onClick={copy}
             className="ml-auto flex items-center gap-1 bg-[#14161B] border border-[#232730] text-gray-400 hover:text-white text-[10px] px-2 py-1 rounded-md transition flex-shrink-0"
@@ -187,19 +227,24 @@ export default function TokenPage({ market, onBack }: { market: Market; onBack: 
             {copied ? <Check size={10} /> : <Copy size={10} />}
             {copied ? "Copied" : "Copy"}
           </button>
-          <button className="flex items-center gap-1 bg-[#14161B] border border-[#232730] text-gray-400 hover:text-white text-[10px] px-2 py-1 rounded-md transition flex-shrink-0">
+          <a
+            href={`${EXPLORER}/address/${market.token}`}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1 bg-[#14161B] border border-[#232730] text-gray-400 hover:text-white text-[10px] px-2 py-1 rounded-md transition flex-shrink-0"
+          >
             <ExternalLink size={10} />
             Explorer
-          </button>
+          </a>
         </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <Stat label="24h volume" value={compact(market.volume24h)} />
-        <Stat label="Liquidity" value={compact(market.liquidity)} />
-        <Stat label="24h fees to stakers" value={compact(market.fees24h)} accent />
-        <Stat label="Holders" value={num(market.holders)} />
-        <Stat label="Trades 24h" value={num(flow.buys + flow.sells)} />
+        <Stat label={`Volume ${win || "…"}`} value={compact(market.volume)} />
+        <Stat label="Pool liquidity" value={compact(market.tvl)} />
+        <Stat label={`Fees ${win || "…"}`} value={compact(market.fees)} accent />
+        <Stat label="Trades" value={num(buys + sells)} />
+        <Stat label="Fee tier" value={`${(market.feeBps / 10_000).toFixed(2)}%`} />
       </div>
 
       <div className="grid lg:grid-cols-[1fr_300px] gap-4 items-start">
@@ -208,57 +253,69 @@ export default function TokenPage({ market, onBack }: { market: Market; onBack: 
           <div className="flex items-center justify-between mb-3">
             <span className="text-[11px] font-semibold text-white">Price</span>
             <div className="flex items-center gap-1">
-              {TIMEFRAMES.map((t) => (
+              {HISTORY_SPANS.map((s) => (
                 <button
-                  key={t}
-                  onClick={() => setTf(t)}
+                  key={s.label}
+                  onClick={() => setSpan(s.label)}
                   className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition ${
-                    tf === t ? "bg-[#10B981] text-black" : "text-gray-400 hover:text-white"
+                    span === s.label ? "bg-[#10B981] text-black" : "text-gray-400 hover:text-white"
                   }`}
                 >
-                  {t}
+                  {s.label}
                 </button>
               ))}
             </div>
           </div>
 
           <div className="h-[260px] -ml-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={series} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-                <defs>
-                  <linearGradient id="tokenFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={stroke} stopOpacity={0.28} />
-                    <stop offset="100%" stopColor={stroke} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis
-                  dataKey="t"
-                  tick={{ fill: "#5A6068", fontSize: 9 }}
-                  axisLine={false}
-                  tickLine={false}
-                  minTickGap={28}
-                />
-                <YAxis
-                  domain={["dataMin", "dataMax"]}
-                  tick={{ fill: "#5A6068", fontSize: 9 }}
-                  axisLine={false}
-                  tickLine={false}
-                  width={52}
-                  tickFormatter={(v: number) => usd(v, 2)}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: "#14161B",
-                    border: "1px solid #232730",
-                    borderRadius: 10,
-                    fontSize: 11,
-                  }}
-                  labelStyle={{ color: "#9A9FA8" }}
-                  formatter={(v) => [usd(Number(v)), "Price"] as [string, string]}
-                />
-                <Area type="monotone" dataKey="price" stroke={stroke} strokeWidth={1.6} fill="url(#tokenFill)" />
-              </AreaChart>
-            </ResponsiveContainer>
+            {chart.length > 1 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chart} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id="tokenFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={stroke} stopOpacity={0.28} />
+                      <stop offset="100%" stopColor={stroke} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis
+                    dataKey="t"
+                    tick={{ fill: "#5A6068", fontSize: 9 }}
+                    axisLine={false}
+                    tickLine={false}
+                    minTickGap={28}
+                  />
+                  <YAxis
+                    domain={["dataMin", "dataMax"]}
+                    tick={{ fill: "#5A6068", fontSize: 9 }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={52}
+                    tickFormatter={(v: number) => usd(v, 2)}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: "#14161B",
+                      border: "1px solid #232730",
+                      borderRadius: 10,
+                      fontSize: 11,
+                    }}
+                    labelStyle={{ color: "#9A9FA8" }}
+                    formatter={(v) => [usd(Number(v)), "Price"] as [string, string]}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="price"
+                    stroke={stroke}
+                    strokeWidth={1.6}
+                    fill="url(#tokenFill)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-[11px] text-gray-600">
+                {loading ? "Reading swaps…" : `No trades in the last ${span}.`}
+              </div>
+            )}
           </div>
         </div>
 
@@ -268,7 +325,9 @@ export default function TokenPage({ market, onBack }: { market: Market; onBack: 
       {/* order flow */}
       <div className="bg-[#1B1E24] border border-[#232730] rounded-2xl p-4">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-[11px] font-semibold text-white">Buy / sell pressure (24h)</span>
+          <span className="text-[11px] font-semibold text-white">
+            Buy / sell pressure {win ? `(${win})` : ""}
+          </span>
           <span className="font-mono text-[11px] text-gray-400">
             <span className="text-[#10B981]">{flow.buys} buys</span>
             {" · "}
@@ -316,8 +375,11 @@ export default function TokenPage({ market, onBack }: { market: Market; onBack: 
               </tr>
             </thead>
             <tbody>
-              {visible.map((t) => (
-                <tr key={t.id} className="border-b border-[#1F2228] last:border-0 hover:bg-[#14161B] transition">
+              {visible.map((t, i) => (
+                <tr
+                  key={`${t.hash}-${i}`}
+                  className="border-b border-[#1F2228] last:border-0 hover:bg-[#14161B] transition"
+                >
                   <td className="px-3 py-2">
                     <span
                       className={`font-semibold uppercase text-[10px] ${
@@ -328,16 +390,25 @@ export default function TokenPage({ market, onBack }: { market: Market; onBack: 
                     </span>
                   </td>
                   <td className="px-3 py-2 text-right font-mono text-gray-300">{usd(t.price)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-gray-300">{num(t.amount, 2)}</td>
+                  <td className="px-3 py-2 text-right font-mono text-gray-300">{num(t.shares, 4)}</td>
                   <td className="px-3 py-2 text-right font-mono text-white">{usd(t.value)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-gray-500">{shortAddr(t.trader)}</td>
+                  <td className="px-3 py-2 text-right font-mono text-gray-500">
+                    <a
+                      href={`${EXPLORER}/tx/${t.hash}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="hover:text-[#10B981] transition"
+                    >
+                      {shortAddr(t.account)}
+                    </a>
+                  </td>
                   <td className="px-3 py-2 text-right font-mono text-gray-600">{ago(t.secondsAgo)}</td>
                 </tr>
               ))}
               {visible.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-3 py-10 text-center text-gray-500">
-                    No {tab} in this window.
+                    {loading ? "Reading swaps…" : `No ${tab} in the last ${span}.`}
                   </td>
                 </tr>
               )}
