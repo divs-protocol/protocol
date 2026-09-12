@@ -7,7 +7,8 @@ import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { 
   BarChart2, Layers, Wallet, ClipboardList, User, 
   Headphones, Settings, BookOpen, 
-  Search, Bell, ArrowUpRight, ArrowDownRight, ChevronDown
+  Search, Bell, ArrowUpRight, ArrowDownRight, ChevronDown,
+  Zap, LineChart, Menu, X as Close
 } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
 import DocsSection from "./DocsSection";
@@ -23,6 +24,119 @@ import { PortfolioView, ActivityView, AccountView, SettingsView } from "./Sideba
 import SupportWidget from "./SupportWidget";
 import Footer from "./Footer";
 import { NavContext } from "./nav";
+
+
+/**
+ * Bottom navigation, phones only.
+ *
+ * The icon rail expands on hover, which a touch screen cannot do, and the
+ * header's section row is hidden below md - so without this a phone can reach
+ * nothing. Five destinations sit in the bar and the rest open in a sheet,
+ * rather than squeezing eleven items into 375px.
+ */
+const BAR_ITEMS = [
+  { id: "home", icon: BarChart2, label: "Pools" },
+  { id: "markets", icon: LineChart, label: "Markets" },
+  { id: "exchange", icon: Zap, label: "Exchange" },
+  { id: "stake", icon: Layers, label: "Stake" },
+];
+
+const SHEET_ITEMS = [
+  { id: "protocol", label: "Protocol" },
+  { id: "trade", label: "Trade" },
+  { id: "analytics", label: "Analytics" },
+  { id: "portfolio", label: "Portfolio" },
+  { id: "activity", label: "Activity" },
+  { id: "account", label: "Account" },
+  { id: "settings", label: "Settings" },
+  { id: "docs", label: "Docs" },
+];
+
+function MobileNav({
+  active,
+  onNavigate,
+  onSupport,
+}: {
+  active: string;
+  onNavigate: (s: string) => void;
+  onSupport: () => void;
+}) {
+  const [sheet, setSheet] = useState(false);
+  const go = (id: string) => {
+    setSheet(false);
+    onNavigate(id);
+  };
+
+  return (
+    <>
+      {sheet && (
+        <div className="md:hidden fixed inset-0 z-40 bg-black/60" onClick={() => setSheet(false)}>
+          <div
+            className="absolute bottom-16 inset-x-2 bg-[#14161B] border border-[#232730] rounded-2xl p-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-2 py-2">
+              <span className="text-white font-bold text-[13px]">All sections</span>
+              <button onClick={() => setSheet(false)} aria-label="Close menu" className="text-gray-500 p-1">
+                <Close size={15} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {SHEET_ITEMS.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => go(item.id)}
+                  className={`text-left px-3 py-2.5 rounded-xl text-[12px] font-medium transition ${
+                    active === item.id
+                      ? "bg-[#10B981] text-black font-bold"
+                      : "bg-[#1B1E24] text-gray-300"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  setSheet(false);
+                  onSupport();
+                }}
+                className="text-left px-3 py-2.5 rounded-xl text-[12px] font-medium bg-[#1B1E24] text-gray-300"
+              >
+                Support
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-[#111317] border-t border-[#1F2228] flex">
+        {BAR_ITEMS.map((item) => {
+          const Icon = item.icon;
+          const on = active === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => go(item.id)}
+              className="flex-1 flex flex-col items-center gap-1 py-2.5"
+              style={{ color: on ? "#10B981" : "#7A828C" }}
+            >
+              <Icon size={17} />
+              <span className="text-[9px] font-semibold">{item.label}</span>
+            </button>
+          );
+        })}
+        <button
+          onClick={() => setSheet(true)}
+          className="flex-1 flex flex-col items-center gap-1 py-2.5"
+          style={{ color: sheet ? "#10B981" : "#7A828C" }}
+        >
+          <Menu size={17} />
+          <span className="text-[9px] font-semibold">More</span>
+        </button>
+      </nav>
+    </>
+  );
+}
 
 /**
  * The sidebar is the account side of the app; the header row above it is the
@@ -107,7 +221,7 @@ export default function AppShell({ section }: { section: string }) {
       <div className="w-full h-full bg-[#14161B] border border-[#1F2228] rounded-2xl flex overflow-hidden shadow-2xl">
 
         {/* EXPANDABLE LEFT SIDEBAR */}
-        <aside className="group w-16 hover:w-48 bg-[#111317] border-r border-[#1F2228] flex flex-col items-start justify-between py-4 px-3 flex-shrink-0 transition-all duration-300 ease-in-out z-20">
+        <aside className="group hidden md:flex w-16 hover:w-48 bg-[#111317] border-r border-[#1F2228] flex-col items-start justify-between py-4 px-3 flex-shrink-0 transition-all duration-300 ease-in-out z-20">
           <div className="flex flex-col items-start space-y-2 w-full">
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
@@ -232,7 +346,7 @@ export default function AppShell({ section }: { section: string }) {
             </div>
 
             {/* Header Search Input Bar */}
-            <div className="relative w-72 min-w-0 shrink">
+            <div className="relative w-72 min-w-0 shrink hidden lg:block">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
               <input 
                 type="text" 
@@ -243,7 +357,7 @@ export default function AppShell({ section }: { section: string }) {
 
             {/* Top Right User Controls */}
             <div className="flex items-center space-x-3">
-              <button className="p-2 bg-[#1B1E24] border border-[#232730] rounded-xl text-gray-400 hover:text-white">
+              <button className="hidden sm:block p-2 bg-[#1B1E24] border border-[#232730] rounded-xl text-gray-400 hover:text-white">
                 <Bell size={15} />
               </button>
               
@@ -259,14 +373,17 @@ export default function AppShell({ section }: { section: string }) {
                   onClick={() => injectedConnector && connect({ connector: injectedConnector })}
                   disabled={!injectedConnector}
                   title={injectedConnector ? undefined : "No browser wallet detected"}
-                  className="px-4 py-1.5 bg-[#10B981] text-black font-bold rounded-xl hover:bg-[#0EA5E9] transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-3 sm:px-4 py-1.5 bg-[#10B981] text-black font-bold rounded-xl whitespace-nowrap hover:bg-[#0EA5E9] transition disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {injectedConnector ? "Connect Wallet" : "No Wallet Found"}
+                  <span className="sm:hidden">{injectedConnector ? "Connect" : "No Wallet"}</span>
+                  <span className="hidden sm:inline">
+                    {injectedConnector ? "Connect Wallet" : "No Wallet Found"}
+                  </span>
                 </button>
               )}
 
               {/* User Profile Pill */}
-              <div className="flex items-center space-x-2 bg-[#1B1E24] border border-[#232730] px-2.5 py-1 rounded-xl">
+              <div className="hidden lg:flex items-center space-x-2 bg-[#1B1E24] border border-[#232730] px-2.5 py-1 rounded-xl">
                 <div className="w-5 h-5 rounded-full bg-[#10B981] text-black font-extrabold flex items-center justify-center text-[9px]">
                   DV
                 </div>
@@ -284,7 +401,7 @@ export default function AppShell({ section }: { section: string }) {
             page instead of sitting still behind it.
           */}
           <div
-            className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-none bg-[#0B0C0E]"
+            className="flex-1 overflow-y-auto p-4 pb-24 md:pb-4 space-y-3 scrollbar-none bg-[#0B0C0E]"
             style={{
               backgroundImage:
                 "radial-gradient(circle, rgba(255,255,255,0.085) 1px, transparent 1px)",
@@ -333,9 +450,11 @@ export default function AppShell({ section }: { section: string }) {
                   })}
                 </div>
 
-                <div className="grid grid-cols-12 gap-3">
-                  <div className="col-span-8 bg-[#1B1E24] border border-[#232730] rounded-2xl p-4 flex flex-col justify-between">
-                    <div className="flex justify-between items-start">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                  <div className="lg:col-span-8 bg-[#1B1E24] border border-[#232730] rounded-2xl p-4 flex flex-col justify-between">
+                    {/* Stats sit beside the price on a desktop and under it on a
+                        phone; side by side at 375px they wrap into each other. */}
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
                       <div className="flex items-center space-x-3">
                         <div
                           className="w-9 h-9 rounded-xl flex items-center justify-center text-[11px] font-bold"
@@ -364,7 +483,7 @@ export default function AppShell({ section }: { section: string }) {
                         </div>
                       </div>
 
-                      <div className="flex space-x-4 text-right">
+                      <div className="flex gap-4 sm:gap-4 text-left sm:text-right">
                         <div>
                           <div className="text-[9px] text-gray-500">{win} trades</div>
                           <div className="text-white font-semibold text-xs">{marketsLoading ? "···" : num(selected?.txns ?? 0)}</div>
@@ -415,10 +534,10 @@ export default function AppShell({ section }: { section: string }) {
                     </div>
                   </div>
 
-                  <div className="col-span-4 bg-[#1B1E24] border border-[#232730] rounded-2xl p-4 flex flex-col justify-between">
+                  <div className="lg:col-span-4 bg-[#1B1E24] border border-[#232730] rounded-2xl p-4 flex flex-col justify-between">
                     <div>
                       <h3 className="text-white font-bold mb-2.5">Create Order</h3>
-                      <div className="grid grid-cols-3 gap-1 bg-[#14161B] p-1 rounded-xl mb-3">
+                      <div className="grid grid-cols-3 gap-1 bg-[#14161B] p-1 rounded-xl mb-3 text-center">
                         <button onClick={() => setOrderType("limit")} className={`py-1 rounded-lg text-[10px] font-bold transition ${orderType === "limit" ? "bg-[#10B981] text-black" : "text-gray-400 hover:text-white"}`}>Price Limit</button>
                         <button onClick={() => setOrderType("market")} className={`py-1 rounded-lg text-[10px] font-bold transition ${orderType === "market" ? "bg-[#10B981] text-black" : "text-gray-400 hover:text-white"}`}>Market Price</button>
                         <button onClick={() => setOrderType("stop")} className={`py-1 rounded-lg text-[10px] font-bold transition ${orderType === "stop" ? "bg-[#10B981] text-black" : "text-gray-400 hover:text-white"}`}>Stop Limit</button>
@@ -490,32 +609,34 @@ export default function AppShell({ section }: { section: string }) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-12 gap-3">
-                  <div className="col-span-6 bg-[#1B1E24] border border-[#232730] rounded-2xl p-3.5">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                  <div className="lg:col-span-6 bg-[#1B1E24] border border-[#232730] rounded-2xl p-3.5">
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="text-white font-bold">Depth</h3>
                       <span className="font-mono text-[9px] text-gray-500">
                         spread {book.spread.toFixed(book.decimals)} · {book.spreadPct.toFixed(3)}%
                       </span>
                     </div>
-                    <div className="grid grid-cols-6 text-[9px] text-gray-500 mb-2 border-b border-[#232730] pb-1">
+                    {/* Six columns do not fit a phone; the cumulative pair is
+                        the least load-bearing, so it drops first. */}
+                    <div className="grid grid-cols-4 sm:grid-cols-6 text-[9px] text-gray-500 mb-2 border-b border-[#232730] pb-1">
                       <span>Bid</span>
-                      <span>Size ({selected?.ticker})</span>
-                      <span>Sum ({selected?.ticker})</span>
-                      <span>Size ({selected?.ticker})</span>
-                      <span>Sum ({selected?.ticker})</span>
+                      <span>Size</span>
+                      <span className="hidden sm:block">Sum</span>
+                      <span>Size</span>
+                      <span className="hidden sm:block">Sum</span>
                       <span className="text-right">Ask</span>
                     </div>
                     <div className="space-y-1 font-mono text-[10px]">
                       {book.bids.map((bid, i) => {
                         const ask = book.asks[i];
                         return (
-                          <div key={`d${i}`} className="grid grid-cols-6 items-center">
+                          <div key={`d${i}`} className="grid grid-cols-4 sm:grid-cols-6 items-center">
                             <span className="text-[#10B981] font-semibold">{bid.price.toFixed(book.decimals)}</span>
                             <span className="text-gray-300">{num(bid.size, 2)}</span>
-                            <span className="text-gray-500">{num(bid.cum, 2)}</span>
+                            <span className="hidden sm:block text-gray-500">{num(bid.cum, 2)}</span>
                             <span className="text-gray-300">{ask ? num(ask.size, 2) : "—"}</span>
-                            <span className="text-gray-500">{ask ? num(ask.cum, 2) : "—"}</span>
+                            <span className="hidden sm:block text-gray-500">{ask ? num(ask.cum, 2) : "—"}</span>
                             <span className="text-red-400 font-semibold text-right">
                               {ask ? ask.price.toFixed(book.decimals) : "—"}
                             </span>
@@ -528,7 +649,7 @@ export default function AppShell({ section }: { section: string }) {
                     </div>
                   </div>
 
-                  <div className="col-span-3 bg-[#1B1E24] border border-[#232730] rounded-2xl p-3.5">
+                  <div className="lg:col-span-3 bg-[#1B1E24] border border-[#232730] rounded-2xl p-3.5">
                     <h3 className="text-white font-bold mb-2">Recent Trades</h3>
                     <div className="flex justify-between text-[9px] text-gray-500 mb-2 border-b border-[#232730] pb-1">
                       <span>Price</span>
@@ -551,7 +672,7 @@ export default function AppShell({ section }: { section: string }) {
                     </div>
                   </div>
 
-                  <div className="col-span-3 bg-[#1B1E24] border border-[#232730] rounded-2xl p-3.5">
+                  <div className="lg:col-span-3 bg-[#1B1E24] border border-[#232730] rounded-2xl p-3.5">
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="text-white font-bold">Largest Trades</h3>
                       <button
@@ -632,6 +753,8 @@ export default function AppShell({ section }: { section: string }) {
       </div>
 
     </div>
+      <MobileNav active={activeSection} onNavigate={setActiveSection} onSupport={() => setSupportOpen(true)} />
+
       <SupportWidget
         open={supportOpen}
         onClose={() => setSupportOpen(false)}
