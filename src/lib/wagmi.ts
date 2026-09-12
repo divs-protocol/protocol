@@ -25,11 +25,19 @@ const localRpcUrl = process.env.NEXT_PUBLIC_LOCAL_RPC_URL ?? "http://127.0.0.1:8
  */
 const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
 
-/** The origin the app is actually served from; the env var covers the server render. */
+/**
+ * The origin the app is actually served from.
+ *
+ * In the browser this is the real origin, so it is right on the production
+ * domain, on a preview deployment and on localhost without configuration. The
+ * constant only covers the server render, where there is no location to read.
+ */
+export const SITE_URL = "https://www.divsprotocol.com";
+
 const siteOrigin =
   typeof window !== "undefined"
     ? window.location.origin
-    : (process.env.NEXT_PUBLIC_SITE_URL ?? "https://divs-protocol.vercel.app");
+    : (process.env.NEXT_PUBLIC_SITE_URL ?? SITE_URL);
 
 const connectors = [
   injected(),
