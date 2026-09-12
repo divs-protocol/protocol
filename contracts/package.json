@@ -7,8 +7,7 @@
     "test": "hardhat test",
     "build": "hardhat build",
     "node": "hardhat node",
-    "deploy:local": "hardhat run scripts/deploy-local.ts --network localhost",
-    "rebase": "hardhat run scripts/rebase.ts --network localhost"
+    "deploy:local": "hardhat run scripts/deploy-local.ts --network localhost"
   },
   "keywords": [],
   "author": "",

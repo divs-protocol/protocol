@@ -1,85 +1,90 @@
-# DIVS Protocol
+<div align="center">
 
-A community-owned exchange for tokenized stocks. Traders buy and sell stock
-tokens 24/7 on the launchpad; the trading fees that a brokerage would keep are
-routed back to DIVS stakers instead.
+<img src="public/logo.png" alt="DIVS" height="72" />
 
-$DIVS is the cash-flow token. Users stake **DIVS** (single-sided) or **DIVS/WETH
-LP**, and earn a weighted share of collected fees plus DIVS emissions. Stock
-tokens are the asset traded on the platform — they are never staked.
+### DIVS Protocol
 
-## Layout
+Decentralized exchange for tokenized equities on Robinhood Chain.<br />
+Instant settlement, markets that never close, and every trading fee paid to $DIVS stakers.
 
-| Path         | What it is                                                      |
-| ------------ | --------------------------------------------------------------- |
-| `src/`       | Next.js 16 dashboard (App Router, Tailwind 4, wagmi + viem)      |
-| `contracts/` | Hardhat 3 project: `DivsStaking.sol` and its Solidity test suite |
+[divsprotocol.com](https://www.divsprotocol.com) · [Documentation](https://www.divsprotocol.com/docs) · [@DIVSProtocol](https://x.com/DIVSProtocol)
 
-The two halves are **separate npm projects on purpose**. The root uses pnpm; the
-Hardhat project keeps its own `package-lock.json` and `node_modules` and is
-installed with npm. Install and run them independently.
+</div>
 
-## Staking accounting
+---
 
-Fees arrive as WETH and are distributed through a single accumulator. A staker's
-claim is:
+Seventeen equities and ETFs trade continuously against on-chain pools. A trade
+settles in the block it lands in — no market hours, no settlement period, no
+broker between a wallet and a pool.
+
+Fees are not revenue the protocol retains. The router charges on the WETH side
+of every trade and forwards the proceeds to the staking vault, which distributes
+them to staked positions by weight.
+
+### Protocol
+
+| | |
+| --- | --- |
+| Chain | Robinhood Chain · 4663 |
+| Markets | 17 equities and ETFs |
+| Assets | Robinhood Stock Tokens (ERC-8056) |
+| Protocol fee | 10 bps, charged in WETH, capped at 100 bps |
+| Staking | Single-sided $DIVS and DIVS/WETH LP |
+| Lock multiplier | 1× flexible to 4× at 52 weeks |
+
+Weight is the staked amount multiplied by three independent multipliers — pool,
+size tier and lock duration — and a position's share of every distribution is
+proportional to it.
 
 ```
-claim = weight * accWethPerWeight - debt
-weight = amount * poolMultiplier * tierMultiplier * lockMultiplier
+weight = amount × poolMultiplier × tierMultiplier × lockMultiplier
+claim  = weight × accWethPerWeight − debt
 ```
 
-Both pools share one global weight space, so `poolMultiplier` is the governance
--set exchange rate between a staked DIVS and a staked LP token. `lockMultiplier`
-runs 1x flexible to 4x at a 52-week lock; `tierMultiplier` is threshold-based on
-position size.
+### Contracts
 
-Two rules carry solvency, and both are enforced structurally rather than assumed:
+| Contract | Responsibility |
+| --- | --- |
+| `DivsStaking` | Holds stake, tracks weight, distributes WETH fees and DIVS emissions |
+| `DivsRouter` | Executes trades against the pools and charges the protocol fee |
 
-- **Fees are pulled in before they are distributed.** `notifyFee` transfers the
-  WETH first and only then raises the accumulator, so the contract cannot promise
-  revenue it does not hold. It is permissionless — an unauthorised caller can
-  only donate.
-- **Emissions are funded before they are scheduled.** `notifyEmission(amount,
-  duration)` pulls the DIVS in and *derives* the rate from what arrived, rather
-  than taking a rate on trust. Accrual stops at `periodFinish` unless a new
-  period is funded, so the contract cannot build claims nothing backs. DIVS is
-  both a staked and an emitted asset, so `emissionsFunded` counts explicit
-  funding only and `totalStakedDivs` is never drawn on.
+$DIVS is launched on Pons and is not deployed from this repository. Deployed
+addresses are published at launch.
 
-Any weight change must settle outstanding rewards into `pending` before it takes
-effect, so every mutating path routes through `_settle`.
+Two invariants are structural rather than assumed. `notifyFee` transfers WETH in
+before raising the accumulator, so the contract cannot record an entitlement it
+does not hold. `notifyEmission` pulls the DIVS in and derives the rate from what
+arrived, so emissions cannot be scheduled beyond what funds them — and since
+$DIVS is both staked and emitted, the reward budget is tracked apart from
+deposits. Both are covered by fuzzed tests; the suite is 40 tests.
 
-`poke` is permissionless: a staker has no incentive to demote their own expired
-lock, and an expired boost would otherwise keep diluting everyone still locked.
+### Repository
 
-Emission periods follow the Synthetix `StakingRewards` pattern: funding defines
-the rate, so there is no way to promise emissions that are not held, and no
-first-come-first-served race over a short reserve. Calling `notifyEmission`
-mid-period rolls the unspent remainder into the new rate. Time passing with
-nothing staked emits nothing, leaving that budget available for a later period.
+| Path | Contents |
+| --- | --- |
+| `src/` | Next.js 16 application — App Router, Tailwind 4, wagmi, viem |
+| `contracts/` | Hardhat 3 project — Solidity sources and test suite |
 
-## Contracts
+The two halves are separate package projects. The application uses pnpm; the
+Hardhat project keeps its own lockfile and is installed with npm.
 
-```bash
-cd contracts && npm install
-```
-
-```bash
-cd contracts && npx hardhat test
-```
-
-Solidity tests live in `contracts/DivsStaking.t.sol` and run on forge-std,
-including fuzz invariants asserting that WETH paid never exceeds WETH notified
-and that principal is always recoverable.
-
-## Web app
+### Development
 
 ```bash
 pnpm install && pnpm dev
 ```
 
-### Driving it against a local chain
+```bash
+pnpm build && pnpm lint && pnpm typecheck
+```
+
+Contracts:
+
+```bash
+cd contracts && npm install && npx hardhat test
+```
+
+Against a local chain, in two terminals:
 
 ```bash
 cd contracts && npm run node
@@ -89,14 +94,11 @@ cd contracts && npm run node
 cd contracts && npm run deploy:local
 ```
 
-`deploy:local` deploys mock DIVS/WETH/LP tokens plus `DivsStaking`, wires both
-pools, funds emissions, stakes a locked position, and pushes a fee through so the
-accumulator is non-zero.
+`deploy:local` deploys the vault and the router against mock tokens and a mock
+pool, wires both staking pools, funds an emission period, stakes a locked
+position, and puts a trade through the router so the fee arrives the way it does
+in production.
 
-```bash
-pnpm build && pnpm lint && pnpm typecheck
-```
-
-Chain 31337 is only offered in development builds; override its RPC with
-`NEXT_PUBLIC_LOCAL_RPC_URL`, or force it into a preview build with
+Chain 31337 is offered in development builds only. Override its endpoint with
+`NEXT_PUBLIC_LOCAL_RPC_URL`, or enable it in a preview build with
 `NEXT_PUBLIC_ENABLE_LOCAL_CHAIN=true`.
