@@ -12,7 +12,7 @@ import { useNav } from "./nav";
  */
 /** Off-site destinations. Anything not listed here is a section of the app. */
 const EXTERNAL: Record<string, string> = {
-  GitHub: "https://github.com/valeinfralabs-dotcom/divs-protocol",
+  GitHub: "https://github.com/divs-protocol",
   X: "https://x.com/DIVSProtocol",
 };
 
