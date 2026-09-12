@@ -1,12 +1,11 @@
 /**
- * Stands the whole protocol up on a local node: DIVS, the staking vault, and
- * the router, against a mock WETH and a mock pool. Wires two staking pools,
- * funds emissions, stakes a position, and then puts a real trade through the
- * router so the fee arrives the way it will in production.
+ * Stands the protocol up on a local node: the staking vault and the router,
+ * against mock DIVS, mock WETH and a mock pool. Wires two staking pools, funds
+ * emissions, stakes a position, and then puts a real trade through the router
+ * so the fee arrives the way it will in production.
  *
- * DIVS is the production token here, not a mock: its supply is fixed at
- * deployment, so everything below is funded by transferring from the deployer's
- * balance rather than minting on demand.
+ * $DIVS is launched on Pons rather than deployed from this repo, so it is a
+ * mock here - the vault treats it as any ERC20.
  *
  *   npx hardhat node
  *   npx hardhat run scripts/deploy-local.ts --network localhost
@@ -19,8 +18,10 @@ async function main() {
   const { ethers } = await network.connect();
   const [deployer, alice] = await ethers.getSigners();
 
-  // The whole fixed supply lands with the deployer, standing in for a treasury.
-  const divs = await ethers.deployContract("DivsToken", [deployer.address]);
+  // $DIVS is launched on Pons, so a mock stands in for it locally. Nothing in
+  // the protocol mints or owns the token - only this script does, to have
+  // something to stake.
+  const divs = await ethers.deployContract("MockERC20", ["DIVS", "DIVS"]);
   const weth = await ethers.deployContract("MockWETH");
   const lp = await ethers.deployContract("MockERC20", ["DIVS/WETH LP", "DIVS-LP"]);
   const aapl = await ethers.deployContract("MockERC20", ["Apple", "AAPL"]);
@@ -73,6 +74,7 @@ async function main() {
   // emissions can never be scheduled without the DIVS to back them.
   const emissionBudget = ethers.parseEther("100000");
   const emissionDuration = 30n * 24n * 60n * 60n;
+  await (await divs.mint(deployer.address, emissionBudget + ethers.parseEther("1000"))).wait();
   await (await divs.approve(await staking.getAddress(), emissionBudget)).wait();
   await (await staking.notifyEmission(emissionBudget, emissionDuration)).wait();
 
@@ -94,7 +96,7 @@ async function main() {
   console.log("\nDeployed to localhost (chain 31337):");
   console.log("  DivsStaking :", await staking.getAddress());
   console.log("  DivsRouter  :", await router.getAddress());
-  console.log("  DIVS        :", await divs.getAddress(), `(supply ${ethers.formatEther(await divs.totalSupply())})`);
+  console.log("  DIVS (mock) :", await divs.getAddress());
   console.log("  WETH        :", wethAddress);
   console.log("  LP          :", await lp.getAddress());
   console.log("  AAPL        :", aaplAddress);
