@@ -8,8 +8,12 @@ const description =
 
 /**
  * `metadataBase` is what Next resolves relative asset paths against, so without
- * it a link posted anywhere off-site asks for /logo.png on that site rather
+ * it a link posted anywhere off-site asks for the image on that site rather
  * than on this one, and the preview comes back blank.
+ *
+ * The card is its own asset. The in-app logo is a single-colour cutout on
+ * transparency, which works on this dark UI but loses its two bars against the
+ * white a preview card is drawn on.
  */
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -20,14 +24,14 @@ export const metadata: Metadata = {
     description,
     url: SITE_URL,
     siteName: "DIVS Protocol",
-    images: ["/logo.png"],
+    images: ["/logo-card.png"],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "DIVS Protocol",
     description,
-    images: ["/logo.png"],
+    images: ["/logo-card.png"],
   },
 };
 

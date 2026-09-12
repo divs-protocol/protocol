@@ -256,7 +256,7 @@ export default function AppShell({ section }: { section: string }) {
 
   return (
     <NavContext.Provider value={setActiveSection}>
-    <div className="h-screen w-screen bg-[#0B0C0E] text-[#9A9FA8] font-sans p-3 flex items-center justify-center overflow-hidden text-xs select-none">
+    <div className="h-screen w-screen bg-[#0B0C0E] text-[#9A9FA8] font-sans p-3 flex items-center justify-center overflow-hidden text-xs">
       
       {/* INNER DASHBOARD WRAPPER CONTAINER */}
       <div className="w-full h-full bg-[#14161B] border border-[#1F2228] rounded-2xl flex overflow-hidden shadow-2xl">
