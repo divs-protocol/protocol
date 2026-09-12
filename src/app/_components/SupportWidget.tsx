@@ -16,7 +16,7 @@ import { X, ChevronRight, Plus, Minus, ExternalLink } from "lucide-react";
 
 const SOCIALS: { label: string; url?: string }[] = [
   { label: "GitHub", url: "https://github.com/valeinfralabs-dotcom/divs-protocol" },
-  { label: "X", url: undefined },
+  { label: "X", url: "https://x.com/DIVSProtocol" },
   { label: "Telegram", url: undefined },
   { label: "Discord", url: undefined },
 ];
