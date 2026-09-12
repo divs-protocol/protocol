@@ -85,7 +85,7 @@ export default function AnalyticsSection() {
   const feeRate = volume ? (fees / volume) * 100 : 0;
   const buyShare = buys + sells ? buys / (buys + sells) : 0.5;
 
-  // Fee revenue is concentrated in a handful of markets; a chart of all
+  // Pool fees are concentrated in a handful of markets; a chart of all
   // seventeen is mostly empty bars, so this shows the ones that produced it.
   const chartData = useMemo(
     () => byFees.filter((m) => m.fees > 0).slice(0, 10),
@@ -102,17 +102,17 @@ export default function AnalyticsSection() {
       <div>
         <h2 className="text-white font-bold tracking-tight text-xl mb-1">Analytics</h2>
         <p className="text-[11px] text-gray-500">
-          What traded, what it paid in fees, and where that revenue came from. Flow figures cover
-          the last {win} of chain.
+          What traded, and what each market paid its liquidity providers. Flow figures cover the
+          last {win} of chain.
         </p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Stat
-          label={`Fees ${win}`}
+          label={`Pool fees ${win}`}
           value={compact(fees)}
           accent
-          sub="at each pool's fee tier"
+          sub="to pool LPs, not stakers"
           loading={loading}
         />
         <Stat label={`Volume ${win}`} value={compact(volume)} sub="across all markets" loading={loading} />
@@ -128,7 +128,7 @@ export default function AnalyticsSection() {
 
       {/* where the fees came from */}
       <Panel
-        title="Fee revenue by market"
+        title="Pool fees by market"
         right={<span className="font-mono text-[10px] text-gray-500">last {win}</span>}
       >
         <div className="h-[260px] p-4 pt-5">
@@ -171,7 +171,7 @@ export default function AnalyticsSection() {
 
       <div className="grid lg:grid-cols-2 gap-3 items-start">
         {/* fee share */}
-        <Panel title="Share of fee revenue">
+        <Panel title="Share of pool fees">
           <div className="p-4 space-y-3">
             {byFees.filter((m) => m.fees > 0).slice(0, 8).map((m) => (
               <div key={m.ticker}>

@@ -173,6 +173,76 @@ const TOPICS: Topic[] = [
     ),
   },
   {
+    id: "stocks",
+    label: "Tokenized stocks",
+    eyebrow: "The assets",
+    title: "Tokenized stocks",
+    lead: "Seventeen equities and ETFs trade on the protocol as Robinhood Stock Tokens: ERC-20 contracts on Robinhood Chain that track a listed security.",
+    accent: ACCENTS.cyan,
+    body: (a) => (
+      <>
+        <H>What is listed</H>
+        <P>
+          Twenty tokens are issued on the chain and seventeen have a pool deep enough to trade
+          against. They cover single names, index ETFs and commodity ETFs.
+        </P>
+        <Table
+          head={["Kind", "Examples"]}
+          rows={[
+            ["Equities", "AAPL, NVDA, TSLA, GOOGL, COIN, MSTR, GME, LLY, DJT"],
+            ["Index ETFs", "SPY, QQQ"],
+            ["Commodity and treasury ETFs", "GLD, SGOV"],
+          ]}
+        />
+
+        <H>Settlement</H>
+        <P>
+          A trade is a swap against a pool, so it settles in the block it lands in. Robinhood Chain
+          produces a block roughly every tenth of a second. There is no settlement period, no
+          custodian holding the position in between, and no counterparty to fail.
+        </P>
+
+        <H>Trading hours</H>
+        <P>
+          There are none. The pools accept a swap at any hour on any day, including weekends and
+          market holidays, because nothing about the pool refers to an exchange calendar.
+        </P>
+
+        <H>Dividends and splits</H>
+        <P>
+          These tokens implement ERC-8056. A corporate action is applied by changing a display
+          scalar, <C>uiMultiplier</C>, rather than by moving tokens into or out of a holder&apos;s
+          wallet. The balance in the contract does not change; the number of shares it represents
+          does.
+        </P>
+        <Pre>{`shares shown = balanceOf(holder) × uiMultiplier()`}</Pre>
+        <P>
+          This is not hypothetical: AAPL currently sits at 1.000566 and SGOV at 1.005102. Any figure
+          in the app that represents a share count applies the multiplier, and any figure that
+          represents a token amount does not.
+        </P>
+
+        <H>What the issuer controls</H>
+        <P>
+          The tokens are issued by Robinhood, not by DIVS. The protocol provides the venue and takes
+          a fee on trades; it does not mint, redeem or custody the assets.
+        </P>
+        <Table
+          head={["Control", "Effect"]}
+          rows={[
+            ["uiMultiplier", "Applies dividends and splits to every holder at once."],
+            ["pause", "Halts transfers of that token, so its market stops trading until unpaused."],
+            ["Issuance", "New tokens and new listings are the issuer's decision, not the protocol's."],
+          ]}
+        />
+        <Note accent={a} label="Transfers are permissionless">
+          Within those limits the tokens move like any ERC-20. There is no allowlist on transfer, so
+          a wallet that holds one can trade it without the issuer&apos;s involvement.
+        </Note>
+      </>
+    ),
+  },
+  {
     id: "staking",
     label: "Staking",
     eyebrow: "Guide",
@@ -487,6 +557,10 @@ EmissionNotified(amount, rate, periodFinish)`}</Pre>
             [
               "Expired locks retain weight",
               "An expired lock keeps its multiplier until the position is updated or poked.",
+            ],
+            [
+              "Markets can be paused",
+              "Every stock token can be paused by its issuer. While paused, swaps against that market fail and no fee is generated from it.",
             ],
           ]}
         />

@@ -156,7 +156,7 @@ export default function MarketsSection() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Markets listed" value={String(markets.length)} />
         <Stat label={`Volume ${win}`} value={compact(totals.volume)} loading={loading} />
-        <Stat label={`Fees ${win}`} value={compact(totals.fees)} accent loading={loading} />
+        <Stat label={`Pool fees ${win}`} value={compact(totals.fees)} accent loading={loading} />
         <Stat label="Pool liquidity" value={compact(totals.tvl)} loading={loading} />
       </div>
 
@@ -200,7 +200,7 @@ export default function MarketsSection() {
                 <th className="px-3 py-2.5 text-right font-semibold text-gray-500">Trend</th>
                 <SortHeader label={`Volume ${win}`} active={sortKey === "volume"} dir={dir} onClick={() => toggleSort("volume")} />
                 <SortHeader label="Liquidity" active={sortKey === "tvl"} dir={dir} onClick={() => toggleSort("tvl")} />
-                <SortHeader label={`Fees ${win}`} active={sortKey === "fees"} dir={dir} onClick={() => toggleSort("fees")} />
+                <SortHeader label={`Pool fees ${win}`} active={sortKey === "fees"} dir={dir} onClick={() => toggleSort("fees")} />
                 <SortHeader label="Trades" active={sortKey === "txns"} dir={dir} onClick={() => toggleSort("txns")} />
                 <th className="px-3 py-2.5 w-20" />
               </tr>
@@ -282,8 +282,9 @@ export default function MarketsSection() {
 
       <p className="text-[10px] text-gray-600">
         Showing {rows.length} of {markets.length} markets. Flow columns cover the last {win} of
-        chain, measured from block timestamps. Fees are each market&apos;s volume at its own pool fee
-        tier.
+        chain, measured from block timestamps. Pool fees are each market&apos;s volume at its own
+        fee tier, paid to that pool&apos;s liquidity providers. The DIVS protocol fee is separate and
+        goes to stakers.
       </p>
 
       <Footer />
