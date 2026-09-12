@@ -1,0 +1,247 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {Test} from "forge-std/Test.sol";
+import {DivsRouter} from "./DivsRouter.sol";
+import {DivsStaking} from "./DivsStaking.sol";
+import {MockERC20} from "./mocks/MockERC20.sol";
+import {MockWETH} from "./mocks/MockWETH.sol";
+import {MockV3Pool} from "./mocks/MockV3Pool.sol";
+
+/// @dev The properties that matter here are conservation ones: a trade must
+/// never hand the trader more than the pool paid out, the fee must be exactly
+/// the advertised rate, and every wei taken as a fee must end up at staking
+/// rather than stranded in the router. All three are asserted directly and the
+/// fee arithmetic is fuzzed.
+contract DivsRouterTest is Test {
+    DivsRouter router;
+    DivsStaking staking;
+    MockWETH weth;
+    MockERC20 divs;
+    MockERC20 aapl;
+    MockV3Pool pool;
+
+    address owner = address(0xA11CE);
+    address alice = address(0xA1);
+
+    uint256 constant FEE_BPS = 10; // 0.10%
+    /// @dev 1 AAPL = 0.1 WETH, so 1 WETH buys 10 AAPL.
+    uint256 constant RATE = 10e18;
+
+    function setUp() public {
+        weth = new MockWETH();
+        divs = new MockERC20("DIVS", "DIVS");
+        aapl = new MockERC20("Apple", "AAPL");
+
+        staking = new DivsStaking(address(divs), address(weth), owner);
+        vm.prank(owner);
+        staking.addPool(address(divs), 10_000);
+
+        // A pool priced so that WETH in gives RATE-scaled AAPL out.
+        pool = address(weth) < address(aapl)
+            ? new MockV3Pool(address(weth), address(aapl), RATE)
+            : new MockV3Pool(address(aapl), address(weth), 1e36 / RATE);
+
+        aapl.mint(address(pool), 1_000_000 ether);
+        weth.mint(address(pool), 1_000_000 ether);
+        // Real WETH is fully backed; the mock has to be too, or a withdrawal
+        // by a seller unwrapping to ETH has nothing to pay out.
+        vm.deal(address(weth), 1_000_000 ether);
+
+        router = new DivsRouter(address(weth), address(staking), FEE_BPS, owner);
+
+        // Someone has to be staked or notifyFee parks the fee in unallocatedFees.
+        divs.mint(alice, 1_000 ether);
+        vm.startPrank(alice);
+        divs.approve(address(staking), type(uint256).max);
+        staking.stake(0, 1_000 ether, 0);
+        vm.stopPrank();
+    }
+
+    function _fundAlice(uint256 amount) internal {
+        weth.mint(alice, amount);
+        vm.prank(alice);
+        weth.approve(address(router), type(uint256).max);
+    }
+
+    // --- buying ------------------------------------------------------------
+
+    function test_BuyChargesFeeOnTheWethSide() public {
+        uint256 spend = 10 ether;
+        _fundAlice(spend);
+
+        vm.prank(alice);
+        uint256 out = router.buy(address(pool), spend, 0, alice);
+
+        uint256 fee = (spend * FEE_BPS) / 10_000;
+        // Only the post-fee amount reaches the pool.
+        assertEq(out, ((spend - fee) * RATE) / 1e18, "output priced on the net amount");
+        assertEq(aapl.balanceOf(alice), out, "tokens delivered to the trader");
+        assertEq(router.pendingFees() + weth.balanceOf(address(staking)), fee, "fee retained in full");
+    }
+
+    function test_BuyRevertsBelowMinimumOut() public {
+        _fundAlice(1 ether);
+        vm.prank(alice);
+        vm.expectRevert("Too little received");
+        router.buy(address(pool), 1 ether, 100 ether, alice);
+    }
+
+    function test_BuyWithEthWrapsAndCharges() public {
+        vm.deal(alice, 5 ether);
+
+        vm.prank(alice);
+        uint256 out = router.buyWithETH{value: 5 ether}(address(pool), 0, alice);
+
+        uint256 fee = (5 ether * FEE_BPS) / 10_000;
+        assertEq(out, ((5 ether - fee) * RATE) / 1e18, "same pricing as the WETH path");
+        assertEq(alice.balance, 0, "ETH spent");
+    }
+
+    // --- selling -----------------------------------------------------------
+
+    function test_SellChargesFeeOnProceeds() public {
+        uint256 size = 100 ether; // 100 AAPL
+        aapl.mint(alice, size);
+        vm.startPrank(alice);
+        aapl.approve(address(router), type(uint256).max);
+        uint256 out = router.sell(address(pool), size, 0, alice, false);
+        vm.stopPrank();
+
+        uint256 gross = (size * 1e18) / RATE;
+        uint256 fee = (gross * FEE_BPS) / 10_000;
+        assertEq(out, gross - fee, "trader receives proceeds net of the fee");
+        assertEq(weth.balanceOf(alice), out, "WETH delivered");
+    }
+
+    function test_SellCanUnwrapToEth() public {
+        uint256 size = 100 ether;
+        aapl.mint(alice, size);
+
+        vm.startPrank(alice);
+        aapl.approve(address(router), type(uint256).max);
+        uint256 out = router.sell(address(pool), size, 0, alice, true);
+        vm.stopPrank();
+
+        assertEq(alice.balance, out, "paid in native ETH");
+        assertEq(weth.balanceOf(alice), 0, "nothing left wrapped");
+    }
+
+    // --- fee routing -------------------------------------------------------
+
+    function test_FeesReachStakingOnceThresholdIsPassed() public {
+        // Threshold is 0.05 WETH; at 10 bps that needs 50 WETH of volume.
+        uint256 spend = 60 ether;
+        _fundAlice(spend);
+
+        vm.prank(alice);
+        router.buy(address(pool), spend, 0, alice);
+
+        assertEq(router.pendingFees(), 0, "flushed");
+        assertEq(weth.balanceOf(address(staking)), (spend * FEE_BPS) / 10_000, "staking holds the fee");
+
+        (uint256 pendingWeth,) = staking.pendingRewards(alice);
+        assertGt(pendingWeth, 0, "the staker can claim it");
+    }
+
+    function test_SmallTradesAccrueUntilFlushed() public {
+        _fundAlice(1 ether);
+        vm.prank(alice);
+        router.buy(address(pool), 1 ether, 0, alice);
+
+        uint256 fee = (1 ether * FEE_BPS) / 10_000;
+        assertEq(router.pendingFees(), fee, "held below the threshold");
+        assertEq(weth.balanceOf(address(staking)), 0, "not yet notified");
+
+        // Permissionless, so a pending balance is never trapped.
+        vm.prank(address(0xDEAD));
+        router.flushFees();
+        assertEq(weth.balanceOf(address(staking)), fee, "delivered on demand");
+        assertEq(router.pendingFees(), 0, "nothing left behind");
+    }
+
+    function test_FeesAccrueWhileStakingIsUnset() public {
+        vm.prank(owner);
+        router.setStaking(address(0));
+
+        _fundAlice(60 ether);
+        vm.prank(alice);
+        router.buy(address(pool), 60 ether, 0, alice);
+
+        assertEq(router.pendingFees(), (60 ether * FEE_BPS) / 10_000, "held, not lost");
+
+        vm.prank(owner);
+        router.setStaking(address(staking));
+        router.flushFees();
+        assertEq(weth.balanceOf(address(staking)), (60 ether * FEE_BPS) / 10_000, "delivered later");
+    }
+
+    // --- access and limits -------------------------------------------------
+
+    function test_CallbackRejectsUnexpectedCaller() public {
+        vm.prank(address(0xBAD));
+        vm.expectRevert("Unexpected callback");
+        router.uniswapV3SwapCallback(1 ether, 0, "");
+    }
+
+    function test_FeeIsCapped() public {
+        // Read the cap first: an argument is evaluated after expectRevert arms,
+        // so an inline call would consume the cheatcode itself.
+        uint256 overCap = router.MAX_FEE_BPS() + 1;
+        vm.prank(owner);
+        vm.expectRevert("Fee too high");
+        router.setFeeBps(overCap);
+    }
+
+    function test_OnlyOwnerSetsFee() public {
+        vm.prank(alice);
+        vm.expectRevert();
+        router.setFeeBps(50);
+    }
+
+    function test_ZeroFeeIsAllowed() public {
+        vm.prank(owner);
+        router.setFeeBps(0);
+
+        _fundAlice(10 ether);
+        vm.prank(alice);
+        uint256 out = router.buy(address(pool), 10 ether, 0, alice);
+
+        assertEq(out, (10 ether * RATE) / 1e18, "whole amount swapped");
+        assertEq(router.pendingFees(), 0, "nothing charged");
+    }
+
+    function test_RejectsDirectEth() public {
+        vm.deal(alice, 1 ether);
+        vm.prank(alice);
+        (bool ok,) = address(router).call{value: 1 ether}("");
+        assertFalse(ok, "only the WETH contract may pay in");
+    }
+
+    // --- invariants --------------------------------------------------------
+
+    /// @dev The fee is exactly the advertised rate, and the trader is never
+    /// charged twice: what leaves their wallet equals swap input plus fee.
+    function testFuzz_FeeIsExactAndConserved(uint96 rawSpend, uint8 rawBps) public {
+        uint256 spend = uint256(rawSpend);
+        vm.assume(spend >= 1e6 && spend <= 10_000 ether);
+        uint256 bps = uint256(rawBps) % (router.MAX_FEE_BPS() + 1);
+
+        vm.prank(owner);
+        router.setFeeBps(bps);
+
+        _fundAlice(spend);
+        vm.prank(alice);
+        uint256 out = router.buy(address(pool), spend, 0, alice);
+
+        uint256 fee = (spend * bps) / 10_000;
+        assertEq(out, ((spend - fee) * RATE) / 1e18, "priced on the net amount");
+        assertEq(weth.balanceOf(alice), 0, "the whole spend left the wallet");
+        assertEq(
+            router.pendingFees() + weth.balanceOf(address(staking)),
+            fee,
+            "every wei of fee is accounted for"
+        );
+        assertEq(weth.balanceOf(address(router)), router.pendingFees(), "no stray WETH");
+    }
+}
