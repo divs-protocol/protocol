@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { useAccount, useDisconnect } from "wagmi";
 import { 
   BarChart2, Layers, Wallet, ClipboardList, User, 
   Headphones, Settings, BookOpen, 
@@ -22,6 +22,7 @@ import ExchangeSection from "./ExchangeSection";
 import StakeSection from "./StakeSection";
 import { PortfolioView, ActivityView, AccountView, SettingsView } from "./SidebarViews";
 import SupportWidget from "./SupportWidget";
+import { useConnectWallet } from "./wallet";
 import Footer from "./Footer";
 import { NavContext } from "./nav";
 
@@ -173,8 +174,7 @@ export default function AppShell({ section }: { section: string }) {
   const [supportOpen, setSupportOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const { address, isConnected } = useAccount();
-  const { connect, connectors } = useConnect();
-  const injectedConnector = connectors[0];
+  const openWallet = useConnectWallet();
   const { disconnect } = useDisconnect();
   /*
    * The dashboard reads the same snapshot every other section does. It used to
@@ -387,15 +387,11 @@ export default function AppShell({ section }: { section: string }) {
                 </button>
               ) : (
                 <button 
-                  onClick={() => injectedConnector && connect({ connector: injectedConnector })}
-                  disabled={!injectedConnector}
-                  title={injectedConnector ? undefined : "No browser wallet detected"}
+                  onClick={openWallet}
                   className="px-3 sm:px-4 py-1.5 bg-[#10B981] text-black font-bold rounded-xl whitespace-nowrap hover:bg-[#0EA5E9] transition disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <span className="sm:hidden">{injectedConnector ? "Connect" : "No Wallet"}</span>
-                  <span className="hidden sm:inline">
-                    {injectedConnector ? "Connect Wallet" : "No Wallet Found"}
-                  </span>
+                  <span className="sm:hidden">Connect</span>
+                  <span className="hidden sm:inline">Connect Wallet</span>
                 </button>
               )}
 
@@ -615,7 +611,7 @@ export default function AppShell({ section }: { section: string }) {
                       </div>
                       <button
                         onClick={() =>
-                          !isConnected && injectedConnector && connect({ connector: injectedConnector })
+                          !isConnected && openWallet()
                         }
                         disabled={isConnected}
                         className="w-full bg-[#10B981] hover:bg-[#0EA372] disabled:opacity-40 disabled:cursor-not-allowed text-black font-extrabold py-2 rounded-xl transition"

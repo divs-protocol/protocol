@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useAccount, useConnect } from "wagmi";
+import { useAccount } from "wagmi";
+import { useConnectWallet } from "./wallet";
 import {
   ArrowRight,
   Plus,
@@ -119,8 +120,7 @@ function Hero({
   onTrade: (t: string) => void;
 }) {
   const { isConnected } = useAccount();
-  const { connect, connectors } = useConnect();
-  const injected = connectors[0];
+  const openWallet = useConnectWallet();
 
   const featured = priced.find((p) => p.market.ticker === "AAPL") ?? priced[0];
   const series = featured.market.series;
@@ -160,11 +160,10 @@ function Hero({
               </button>
             ) : (
               <button
-                onClick={() => injected && connect({ connector: injected })}
-                disabled={!injected}
-                className="bg-[#10B981] hover:bg-[#0EA372] disabled:opacity-40 text-black font-bold text-[13px] px-6 py-3.5 rounded-xl transition"
+                onClick={openWallet}
+                className="bg-[#10B981] hover:bg-[#0EA372] text-black font-bold text-[13px] px-6 py-3.5 rounded-xl transition"
               >
-                {injected ? "Connect wallet" : "No wallet found"}
+                Connect wallet
               </button>
             )}
             <button

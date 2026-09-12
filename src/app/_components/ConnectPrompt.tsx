@@ -1,7 +1,8 @@
 "use client";
 
-import { useAccount, useConnect } from "wagmi";
+import { useAccount } from "wagmi";
 import { Wallet } from "lucide-react";
+import { useConnectWallet } from "./wallet";
 
 /**
  * Stand-in for any view that describes the viewer's own position.
@@ -12,8 +13,7 @@ import { Wallet } from "lucide-react";
  */
 export default function ConnectPrompt({ what }: { what: string }) {
   const { isConnected } = useAccount();
-  const { connect, connectors } = useConnect();
-  const injected = connectors[0];
+  const openWallet = useConnectWallet();
 
   if (isConnected) return null;
 
@@ -27,12 +27,10 @@ export default function ConnectPrompt({ what }: { what: string }) {
         {what} is specific to your address. Connect a wallet to see it.
       </p>
       <button
-        onClick={() => injected && connect({ connector: injected })}
-        disabled={!injected}
-        title={injected ? undefined : "No browser wallet detected"}
+        onClick={openWallet}
         className="bg-[#10B981] hover:bg-[#0EA372] disabled:opacity-40 disabled:cursor-not-allowed text-black font-bold text-[11px] px-5 py-2.5 rounded-xl transition"
       >
-        {injected ? "Connect Wallet" : "No Wallet Found"}
+        Connect Wallet
       </button>
     </div>
   );
