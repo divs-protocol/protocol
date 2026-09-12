@@ -1,64 +1,13 @@
-<div align="center">
+# DIVS Protocol
 
-<img src="public/logo.png" alt="DIVS" height="72" />
+Exchange for tokenized equities on Robinhood Chain (4663). Seventeen equities
+and ETFs trade against on-chain pools; the router charges a fee on the WETH side
+of every trade and forwards it to the staking vault, which distributes it to
+staked positions by weight.
 
-### DIVS Protocol
+$DIVS is launched on Pons and is not deployed from this repository.
 
-Decentralized exchange for tokenized equities on Robinhood Chain.<br />
-Instant settlement, markets that never close, and every trading fee paid to $DIVS stakers.
-
-[divsprotocol.com](https://www.divsprotocol.com) · [Documentation](https://www.divsprotocol.com/docs) · [@DIVSProtocol](https://x.com/DIVSProtocol)
-
-</div>
-
----
-
-Seventeen equities and ETFs trade continuously against on-chain pools. A trade
-settles in the block it lands in — no market hours, no settlement period, no
-broker between a wallet and a pool.
-
-Fees are not revenue the protocol retains. The router charges on the WETH side
-of every trade and forwards the proceeds to the staking vault, which distributes
-them to staked positions by weight.
-
-### Protocol
-
-| | |
-| --- | --- |
-| Chain | Robinhood Chain · 4663 |
-| Markets | 17 equities and ETFs |
-| Assets | Robinhood Stock Tokens (ERC-8056) |
-| Protocol fee | 10 bps, charged in WETH, capped at 100 bps |
-| Staking | Single-sided $DIVS and DIVS/WETH LP |
-| Lock multiplier | 1× flexible to 4× at 52 weeks |
-
-Weight is the staked amount multiplied by three independent multipliers — pool,
-size tier and lock duration — and a position's share of every distribution is
-proportional to it.
-
-```
-weight = amount × poolMultiplier × tierMultiplier × lockMultiplier
-claim  = weight × accWethPerWeight − debt
-```
-
-### Contracts
-
-| Contract | Responsibility |
-| --- | --- |
-| `DivsStaking` | Holds stake, tracks weight, distributes WETH fees and DIVS emissions |
-| `DivsRouter` | Executes trades against the pools and charges the protocol fee |
-
-$DIVS is launched on Pons and is not deployed from this repository. Deployed
-addresses are published at launch.
-
-Two invariants are structural rather than assumed. `notifyFee` transfers WETH in
-before raising the accumulator, so the contract cannot record an entitlement it
-does not hold. `notifyEmission` pulls the DIVS in and derives the rate from what
-arrived, so emissions cannot be scheduled beyond what funds them — and since
-$DIVS is both staked and emitted, the reward budget is tracked apart from
-deposits. Both are covered by fuzzed tests; the suite is 40 tests.
-
-### Repository
+## Layout
 
 | Path | Contents |
 | --- | --- |
@@ -68,7 +17,55 @@ deposits. Both are covered by fuzzed tests; the suite is 40 tests.
 The two halves are separate package projects. The application uses pnpm; the
 Hardhat project keeps its own lockfile and is installed with npm.
 
-### Development
+## Contracts
+
+| Contract | Responsibility |
+| --- | --- |
+| `DivsStaking` | Holds stake, tracks weight, distributes WETH fees and DIVS emissions |
+| `DivsRouter` | Executes trades against the pools and charges the protocol fee |
+
+### Weight and distribution
+
+```
+weight = amount × poolMultiplier × tierMultiplier × lockMultiplier
+claim  = weight × accWethPerWeight − debt
+```
+
+Both pools share one global weight space, so `poolMultiplier` is the owner-set
+exchange rate between a staked DIVS and a staked LP token. `lockMultiplier` runs
+1× flexible to 4× at a 52-week lock; `tierMultiplier` is threshold-based on
+position size.
+
+Any weight change settles outstanding rewards into `pending` before it takes
+effect, so every mutating path routes through `_settle`. `poke` is
+permissionless: a staker has no incentive to demote their own expired lock, and
+an expired boost dilutes everyone still locked until it is realised.
+
+### Solvency
+
+- `notifyFee` transfers the WETH in before raising the accumulator, so the
+  contract cannot record an entitlement it does not hold. It is permissionless —
+  an unauthorised caller can only donate.
+- `notifyEmission(amount, duration)` pulls the DIVS in and derives the rate from
+  what arrived. Accrual stops at `periodFinish` unless a further period is
+  funded. $DIVS is both staked and emitted, so `emissionsFunded` counts explicit
+  funding only and `totalStakedDivs` is never drawn on.
+
+Both are asserted under fuzzing: WETH paid never exceeds WETH notified, and
+principal is always recoverable.
+
+### Fee routing
+
+`DivsRouter` charges on the WETH side either way — deducted from the input when
+buying, from the proceeds when selling — so staking only ever receives one
+asset. Swaps execute directly against each pool rather than through a periphery
+router; the expected pool is held in transient storage across the callback, so a
+callback from any other address reverts. Fees accrue in the router and flush
+past a threshold; `flushFees` is permissionless.
+
+Default fee is 10 bps, owner-settable, capped at 100 bps in the setter.
+
+## Development
 
 ```bash
 pnpm install && pnpm dev
@@ -78,13 +75,15 @@ pnpm install && pnpm dev
 pnpm build && pnpm lint && pnpm typecheck
 ```
 
-Contracts:
+### Contracts
 
 ```bash
 cd contracts && npm install && npx hardhat test
 ```
 
-Against a local chain, in two terminals:
+### Against a local chain
+
+Two terminals:
 
 ```bash
 cd contracts && npm run node
@@ -102,3 +101,15 @@ in production.
 Chain 31337 is offered in development builds only. Override its endpoint with
 `NEXT_PUBLIC_LOCAL_RPC_URL`, or enable it in a preview build with
 `NEXT_PUBLIC_ENABLE_LOCAL_CHAIN=true`.
+
+## Deployment
+
+```bash
+cd contracts && npx hardhat ignition deploy ignition/modules/DivsProtocol.ts --network robinhood \
+  --parameters '{"DivsProtocol":{"divs":"<pons token>","weth":"0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73","owner":"<owner>"}}'
+```
+
+The application reads deployed addresses from the environment:
+`NEXT_PUBLIC_DIVS_TOKEN_ADDRESS`, `NEXT_PUBLIC_DIVS_STAKING_ADDRESS`,
+`NEXT_PUBLIC_DIVS_ROUTER_ADDRESS`, `NEXT_PUBLIC_DIVS_LP_ADDRESS`. Staking and
+trading stay disabled while they are unset rather than failing when used.
