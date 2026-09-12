@@ -1,14 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { 
   BarChart2, Layers, Wallet, ClipboardList, User, 
   Headphones, Settings, BookOpen, 
   Search, Bell, ArrowUpRight, ArrowDownRight, ChevronDown,
-  Zap, LineChart, Menu, X as Close
+  Menu, X as Close
 } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
 import DocsSection from "./DocsSection";
@@ -27,114 +27,123 @@ import { NavContext } from "./nav";
 
 
 /**
- * Bottom navigation, phones only.
+ * Menu drawer, phones only.
  *
- * The icon rail expands on hover, which a touch screen cannot do, and the
- * header's section row is hidden below md - so without this a phone can reach
- * nothing. Five destinations sit in the bar and the rest open in a sheet,
- * rather than squeezing eleven items into 375px.
+ * The header's section row and the icon rail are both hidden below md - the
+ * row does not fit and the rail expands on hover, which a touch screen cannot
+ * do. Everything from both lives here instead, behind one button, grouped the
+ * way the two navigations are grouped on a desktop.
  */
-const BAR_ITEMS = [
-  { id: "home", icon: BarChart2, label: "Pools" },
-  { id: "markets", icon: LineChart, label: "Markets" },
-  { id: "exchange", icon: Zap, label: "Exchange" },
-  { id: "stake", icon: Layers, label: "Stake" },
+const MENU_GROUPS: { heading: string; items: { id: string; label: string }[] }[] = [
+  {
+    heading: "Protocol",
+    items: [
+      { id: "protocol", label: "Protocol" },
+      { id: "markets", label: "Markets" },
+      { id: "trade", label: "Trade" },
+      { id: "analytics", label: "Analytics" },
+      { id: "exchange", label: "Exchange" },
+    ],
+  },
+  {
+    heading: "Your account",
+    items: [
+      { id: "home", label: "Pools" },
+      { id: "stake", label: "Stakes" },
+      { id: "portfolio", label: "Portfolio" },
+      { id: "activity", label: "Activity" },
+      { id: "account", label: "Account" },
+    ],
+  },
+  {
+    heading: "More",
+    items: [
+      { id: "docs", label: "Docs" },
+      { id: "settings", label: "Settings" },
+    ],
+  },
 ];
 
-const SHEET_ITEMS = [
-  { id: "protocol", label: "Protocol" },
-  { id: "trade", label: "Trade" },
-  { id: "analytics", label: "Analytics" },
-  { id: "portfolio", label: "Portfolio" },
-  { id: "activity", label: "Activity" },
-  { id: "account", label: "Account" },
-  { id: "settings", label: "Settings" },
-  { id: "docs", label: "Docs" },
-];
-
-function MobileNav({
+function MobileMenu({
+  open,
   active,
+  onClose,
   onNavigate,
   onSupport,
 }: {
+  open: boolean;
   active: string;
+  onClose: () => void;
   onNavigate: (s: string) => void;
   onSupport: () => void;
 }) {
-  const [sheet, setSheet] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
   const go = (id: string) => {
-    setSheet(false);
+    onClose();
     onNavigate(id);
   };
 
   return (
-    <>
-      {sheet && (
-        <div className="md:hidden fixed inset-0 z-40 bg-black/60" onClick={() => setSheet(false)}>
-          <div
-            className="absolute bottom-16 inset-x-2 bg-[#14161B] border border-[#232730] rounded-2xl p-2"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-2 py-2">
-              <span className="text-white font-bold text-[13px]">All sections</span>
-              <button onClick={() => setSheet(false)} aria-label="Close menu" className="text-gray-500 p-1">
-                <Close size={15} />
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {SHEET_ITEMS.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => go(item.id)}
-                  className={`text-left px-3 py-2.5 rounded-xl text-[12px] font-medium transition ${
-                    active === item.id
-                      ? "bg-[#10B981] text-black font-bold"
-                      : "bg-[#1B1E24] text-gray-300"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-              <button
-                onClick={() => {
-                  setSheet(false);
-                  onSupport();
-                }}
-                className="text-left px-3 py-2.5 rounded-xl text-[12px] font-medium bg-[#1B1E24] text-gray-300"
-              >
-                Support
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+    <div className="md:hidden fixed inset-0 z-50" role="dialog" aria-label="Menu">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden />
 
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-[#111317] border-t border-[#1F2228] flex">
-        {BAR_ITEMS.map((item) => {
-          const Icon = item.icon;
-          const on = active === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => go(item.id)}
-              className="flex-1 flex flex-col items-center gap-1 py-2.5"
-              style={{ color: on ? "#10B981" : "#7A828C" }}
-            >
-              <Icon size={17} />
-              <span className="text-[9px] font-semibold">{item.label}</span>
-            </button>
-          );
-        })}
-        <button
-          onClick={() => setSheet(true)}
-          className="flex-1 flex flex-col items-center gap-1 py-2.5"
-          style={{ color: sheet ? "#10B981" : "#7A828C" }}
-        >
-          <Menu size={17} />
-          <span className="text-[9px] font-semibold">More</span>
-        </button>
-      </nav>
-    </>
+      <aside className="absolute inset-y-0 left-0 w-[82%] max-w-[320px] bg-[#111317] border-r border-[#1F2228] flex flex-col">
+        <div className="h-14 px-5 flex items-center justify-between border-b border-[#1F2228] flex-shrink-0">
+          <span className="flex items-center gap-2.5">
+            <Image src="/logo.png" alt="" width={24} height={26} className="h-[22px] w-auto" />
+            <span className="text-white font-extrabold tracking-tight text-base">DIVS</span>
+          </span>
+          <button onClick={onClose} aria-label="Close menu" className="text-gray-500 p-1.5 -mr-1.5">
+            <Close size={17} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6 scrollbar-none">
+          {MENU_GROUPS.map((group) => (
+            <div key={group.heading}>
+              <div className="px-2 mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-600">
+                {group.heading}
+              </div>
+              <div className="space-y-0.5">
+                {group.items.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => go(item.id)}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl text-[13px] transition ${
+                      active === item.id
+                        ? "bg-[#10B981] text-black font-bold"
+                        : "text-gray-300 hover:bg-[#1F2228]"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="p-3 border-t border-[#1F2228] flex-shrink-0">
+          <button
+            onClick={() => {
+              onClose();
+              onSupport();
+            }}
+            className="w-full flex items-center justify-center gap-2 bg-[#1B1E24] border border-[#232730] text-white text-[12px] font-semibold py-3 rounded-xl"
+          >
+            <Headphones size={14} /> Support
+          </button>
+        </div>
+      </aside>
+    </div>
   );
 }
 
@@ -162,6 +171,7 @@ export default function AppShell({ section }: { section: string }) {
   const setActiveSection = (next: string) => router.push(next === "home" ? "/" : `/${next}`);
 
   const [supportOpen, setSupportOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const { address, isConnected } = useAccount();
   const { connect, connectors } = useConnect();
   const injectedConnector = connectors[0];
@@ -290,6 +300,13 @@ export default function AppShell({ section }: { section: string }) {
           <header className="h-14 border-b border-[#1F2228] px-5 flex items-center justify-between gap-6 bg-[#14161B] flex-shrink-0">
             {/* Branding Logo */}
             <div className="flex items-center space-x-2.5 flex-shrink-0">
+              <button
+                onClick={() => setMenuOpen(true)}
+                aria-label="Open menu"
+                className="md:hidden text-gray-300 hover:text-white -ml-1 p-1"
+              >
+                <Menu size={19} />
+              </button>
               <Image
                 src="/logo.png"
                 alt=""
@@ -401,7 +418,7 @@ export default function AppShell({ section }: { section: string }) {
             page instead of sitting still behind it.
           */}
           <div
-            className="flex-1 overflow-y-auto p-4 pb-24 md:pb-4 space-y-3 scrollbar-none bg-[#0B0C0E]"
+            className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-none bg-[#0B0C0E]"
             style={{
               backgroundImage:
                 "radial-gradient(circle, rgba(255,255,255,0.085) 1px, transparent 1px)",
@@ -753,7 +770,13 @@ export default function AppShell({ section }: { section: string }) {
       </div>
 
     </div>
-      <MobileNav active={activeSection} onNavigate={setActiveSection} onSupport={() => setSupportOpen(true)} />
+      <MobileMenu
+        open={menuOpen}
+        active={activeSection}
+        onClose={() => setMenuOpen(false)}
+        onNavigate={setActiveSection}
+        onSupport={() => setSupportOpen(true)}
+      />
 
       <SupportWidget
         open={supportOpen}
