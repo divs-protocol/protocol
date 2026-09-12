@@ -25,6 +25,12 @@ const localRpcUrl = process.env.NEXT_PUBLIC_LOCAL_RPC_URL ?? "http://127.0.0.1:8
  */
 const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
 
+/** The origin the app is actually served from; the env var covers the server render. */
+const siteOrigin =
+  typeof window !== "undefined"
+    ? window.location.origin
+    : (process.env.NEXT_PUBLIC_SITE_URL ?? "https://divs-protocol.vercel.app");
+
 const connectors = [
   injected(),
   ...(walletConnectProjectId
@@ -35,8 +41,11 @@ const connectors = [
           metadata: {
             name: "DIVS Protocol",
             description: "Decentralized exchange for tokenized equities on Robinhood Chain.",
-            url: "https://divs-protocol.vercel.app",
-            icons: ["https://divs-protocol.vercel.app/logo.png"],
+            // Wallets compare this against the origin that opened the session
+            // and warn the user when the two disagree, so it is read from the
+            // page rather than pinned to one deployment's URL.
+            url: siteOrigin,
+            icons: [`${siteOrigin}/logo.png`],
           },
         }),
       ]
