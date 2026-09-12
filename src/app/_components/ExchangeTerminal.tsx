@@ -8,6 +8,13 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, ReferenceL
 import { ArrowDownUp, ArrowLeft, Search, Loader2 } from "lucide-react";
 import { MARKETS, type Market, ETH_USD_POOL, poolAbi, wethPerShare, ethUsdFromSqrt } from "@/lib/exchange";
 import { stockTokenAbi, toDisplayShares } from "@/lib/stockTokens";
+import {
+  DEFAULT_FEE_BPS,
+  ROUTER_ADDRESS,
+  SLIPPAGE_OPTIONS,
+  useRouterTrade,
+} from "@/lib/divsRouter";
+import { useConnectWallet } from "./wallet";
 import Footer from "./Footer";
 
 /**
@@ -173,6 +180,9 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
   const [q, setQ] = useState("");
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
+  const [slippage, setSlippage] = useState(0.5);
+  const trade = useRouterTrade();
+  const openWallet = useConnectWallet();
 
   const active = priced.find((p) => p.market.ticker === ticker) ?? priced[0];
   const { trades, loading: tradesLoading, windowSeconds } = useSwaps(active.market, ethUsd);
@@ -236,6 +246,20 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
   const up = stats.change >= 0;
   const stroke = up ? "#10B981" : "#F87171";
   const qty = Number(amount) || 0;
+
+  /*
+   * The amount is entered in shares either way, so a buy spends shares x price
+   * in WETH and a sell returns it. The quote is the pool's marginal price less
+   * the protocol fee; the minimum submitted on-chain is that less slippage.
+   */
+  const grossOut = side === "buy" ? qty : qty * (active?.weth ?? 0);
+  const minOut = grossOut * (1 - DEFAULT_FEE_BPS / 10_000) * (1 - slippage / 100);
+
+  const submit = () => {
+    if (!active || qty <= 0) return;
+    if (side === "buy") trade.buy(active.market, qty * active.weth, minOut);
+    else trade.sell(active.market, qty, minOut);
+  };
 
   const headline: [string, string, string][] = [
     [`${win} change`, stats.windowed ? `${up ? "+" : ""}${stats.change.toFixed(2)}%` : "-", up ? "text-[#10B981]" : "text-red-400"],
@@ -445,23 +469,60 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Protocol fee to stakers</span>
-                <span className="font-mono text-[#10B981]">pending DIVS pools</span>
+                <span className="font-mono text-[#10B981]">
+                  {(DEFAULT_FEE_BPS / 100).toFixed(2)}%
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Minimum received</span>
+                <span className="font-mono text-gray-300">
+                  {qty > 0
+                    ? side === "buy"
+                      ? `${num(minOut, 4)} ${active.market.ticker}`
+                      : `${num(minOut, 6)} WETH`
+                    : "-"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">Max slippage</span>
+                <span className="flex gap-1">
+                  {SLIPPAGE_OPTIONS.map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setSlippage(v)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition ${
+                        slippage === v ? "bg-[#232730] text-white" : "text-gray-500 hover:text-white"
+                      }`}
+                    >
+                      {v}%
+                    </button>
+                  ))}
+                </span>
               </div>
             </div>
 
             <button
-              disabled
-              title="Routing opens when the DIVS pools and fee hook are deployed"
-              className={`w-full py-3 rounded-xl text-[11px] font-bold opacity-30 cursor-not-allowed ${
-                side === "buy" ? "bg-[#10B981] text-black" : "bg-red-500 text-white"
+              onClick={() => (isConnected ? submit() : openWallet())}
+              disabled={isConnected && (trade.busy || !ROUTER_ADDRESS || qty <= 0)}
+              className={`w-full py-3 rounded-xl text-[11px] font-bold transition disabled:opacity-30 disabled:cursor-not-allowed ${
+                side === "buy" ? "bg-[#10B981] hover:bg-[#0EA372] text-black" : "bg-red-500 hover:bg-red-600 text-white"
               }`}
             >
-              {side === "buy" ? "Buy" : "Sell"} {active.market.ticker}
+              {!isConnected
+                ? "Connect wallet"
+                : (trade.label ?? `${side === "buy" ? "Buy" : "Sell"} ${active.market.ticker}`)}
             </button>
 
+            {trade.error && <p className="text-[10px] text-red-400 text-center">{trade.error}</p>}
+            {trade.status === "done" && (
+              <p className="text-[10px] text-[#10B981] text-center">
+                Filled. The fee is on its way to stakers.
+              </p>
+            )}
+
             <p className="text-[10px] leading-relaxed text-gray-600">
-              Prices, history and balances are live from chain 4663. Execution routes through the
-              DIVS pools, which take the fee that pays stakers.
+              Prices, history and balances are live from chain 4663. Trades route through the DIVS
+              router, which takes the fee that pays stakers.
             </p>
           </div>
         </Panel>

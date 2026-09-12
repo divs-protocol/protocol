@@ -33,7 +33,10 @@ const siteOrigin =
 
 const connectors = [
   injected(),
-  ...(walletConnectProjectId
+  // Constructed in the browser only: the provider reaches for indexedDB, which
+  // does not exist while the pages prerender, and the server render is always
+  // disconnected anyway.
+  ...(walletConnectProjectId && typeof window !== "undefined"
     ? [
         walletConnect({
           projectId: walletConnectProjectId,

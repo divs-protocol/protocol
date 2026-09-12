@@ -16,10 +16,17 @@ import {
   useLiveMarkets,
   useMarketHistory,
 } from "@/lib/live";
+import { wethPerShare } from "@/lib/exchange";
+import {
+  DEFAULT_FEE_BPS,
+  ROUTER_ADDRESS,
+  SLIPPAGE_OPTIONS,
+  useRouterTrade,
+} from "@/lib/divsRouter";
+import { useConnectWallet } from "./wallet";
 import ConnectPrompt from "./ConnectPrompt";
 import Footer from "./Footer";
 
-type OrderType = "limit" | "market" | "stop";
 
 /**
  * Trade - the order-entry terminal.
@@ -125,13 +132,14 @@ function MarketList({
 
 /* ---------- depth of book ---------- */
 
-function OrderBookPanel({ market, ethUsd, onPrice }: { market: LiveMarket; ethUsd: number; onPrice: (p: number) => void }) {
+/* Rows are not clickable: with no limit orders there is no field for a
+   clicked price to fill in. */
+function OrderBookPanel({ market, ethUsd }: { market: LiveMarket; ethUsd: number }) {
   const book = useDepth(market, ethUsd);
   const maxCum = Math.max(book.bids.at(-1)?.cum ?? 0, book.asks.at(-1)?.cum ?? 0) || 1;
 
   const Row = ({ level, side }: { level: DepthLevel; side: "bid" | "ask" }) => (
     <button
-      onClick={() => onPrice(level.price)}
       className="relative w-full grid grid-cols-3 gap-2 px-3 py-[3px] text-[10px] font-mono hover:bg-[#14161B] transition"
     >
       <span
@@ -184,16 +192,33 @@ function OrderBookPanel({ market, ethUsd, onPrice }: { market: LiveMarket; ethUs
 
 /* ---------- order entry ---------- */
 
-function OrderEntry({ market, price, setPrice }: { market: LiveMarket; price: string; setPrice: (v: string) => void }) {
+/*
+ * Every trade is a swap against a pool, so there is no book to rest a limit on
+ * and no keeper to trigger a stop. The ticket offers the two things the venue
+ * can actually do, at the price the pool is quoting.
+ */
+function OrderEntry({ market }: { market: LiveMarket }) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
-  const [type, setType] = useState<OrderType>("limit");
   const [amount, setAmount] = useState("10");
-  const [stop, setStop] = useState("");
+  const [slippage, setSlippage] = useState(0.5);
+  const trade = useRouterTrade();
+  const openWallet = useConnectWallet();
+  const { isConnected } = useAccount();
 
   const qty = Number(amount) || 0;
-  const px = type === "market" ? market.price : Number(price) || 0;
-  const total = qty * px;
+  const total = qty * market.price;
   const isBuy = side === "buy";
+
+  const wethPrice = wethPerShare(market, market.sqrtPriceX96);
+  const feeCost = total * (DEFAULT_FEE_BPS / 10_000);
+  const grossOut = isBuy ? qty : qty * wethPrice;
+  const minOut = grossOut * (1 - DEFAULT_FEE_BPS / 10_000) * (1 - slippage / 100);
+
+  const submit = () => {
+    if (qty <= 0 || !wethPrice) return;
+    if (isBuy) trade.buy(market, qty * wethPrice, minOut);
+    else trade.sell(market, qty, minOut);
+  };
 
   return (
     <Panel title="Order entry">
@@ -217,50 +242,29 @@ function OrderEntry({ market, price, setPrice }: { market: LiveMarket; price: st
         </div>
 
         <div className="flex items-center gap-1">
-          {(["limit", "market", "stop"] as const).map((t) => (
+          <span className="text-[9px] uppercase tracking-wide text-gray-500">Max slippage</span>
+          {SLIPPAGE_OPTIONS.map((v) => (
             <button
-              key={t}
-              onClick={() => setType(t)}
-              className={`flex-1 py-1.5 rounded-lg text-[10px] font-semibold capitalize transition ${
-                type === t ? "bg-[#232730] text-white" : "text-gray-500 hover:text-white"
+              key={v}
+              onClick={() => setSlippage(v)}
+              className={`flex-1 py-1.5 rounded-lg text-[10px] font-semibold transition ${
+                slippage === v ? "bg-[#232730] text-white" : "text-gray-500 hover:text-white"
               }`}
             >
-              {t}
+              {v}%
             </button>
           ))}
         </div>
 
-        {type === "stop" && (
-          <div>
-            <label className="block text-[9px] uppercase tracking-wide text-gray-500 mb-1">Stop price</label>
-            <div className="flex items-center bg-[#14161B] border border-[#232730] rounded-lg px-2.5 py-2">
-              <input
-                value={stop}
-                onChange={(e) => setStop(e.target.value.replace(/[^0-9.]/g, ""))}
-                placeholder={market.price.toFixed(2)}
-                inputMode="decimal"
-                className="bg-transparent text-white font-mono text-[12px] w-full outline-none placeholder:text-gray-600"
-              />
-              <span className="text-[9px] text-gray-500">USD</span>
-            </div>
-          </div>
-        )}
 
         <div>
           <label className="block text-[9px] uppercase tracking-wide text-gray-500 mb-1">
-            {type === "market" ? "Price" : "Limit price"}
+            Market price
           </label>
           <div className="flex items-center bg-[#14161B] border border-[#232730] rounded-lg px-2.5 py-2">
-            {type === "market" ? (
-              <span className="font-mono text-[12px] text-gray-500 w-full">Best available</span>
-            ) : (
-              <input
-                value={price}
-                onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ""))}
-                inputMode="decimal"
-                className="bg-transparent text-white font-mono text-[12px] w-full outline-none"
-              />
-            )}
+            <span className="font-mono text-[12px] text-gray-300 w-full">
+              {market.price.toFixed(2)}
+            </span>
             <span className="text-[9px] text-gray-500">USD</span>
           </div>
         </div>
@@ -297,17 +301,36 @@ function OrderEntry({ market, price, setPrice }: { market: LiveMarket; price: st
           </div>
           <div className="flex justify-between">
             <span className="text-gray-500">Fee to stakers</span>
-            <span className="font-mono text-[#10B981]">{usd(total * 0.003)}</span>
+            <span className="font-mono text-[#10B981]">
+              {usd(feeCost)} · {(DEFAULT_FEE_BPS / 100).toFixed(2)}%
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Minimum received</span>
+            <span className="font-mono text-gray-300">
+              {isBuy ? `${num(minOut, 4)} ${market.ticker}` : `${num(minOut, 6)} WETH`}
+            </span>
           </div>
         </div>
 
         <button
-          className={`w-full py-2.5 rounded-xl text-[11px] font-bold transition ${
+          onClick={() => (isConnected ? submit() : openWallet())}
+          disabled={isConnected && (trade.busy || !ROUTER_ADDRESS || qty <= 0)}
+          className={`w-full py-2.5 rounded-xl text-[11px] font-bold transition disabled:opacity-40 disabled:cursor-not-allowed ${
             isBuy ? "bg-[#10B981] hover:bg-[#0EA372] text-black" : "bg-red-500 hover:bg-red-600 text-white"
           }`}
         >
-          {isBuy ? "Buy" : "Sell"} {market.ticker}
+          {!isConnected
+            ? "Connect wallet"
+            : (trade.label ?? `${isBuy ? "Buy" : "Sell"} ${market.ticker}`)}
         </button>
+
+        {trade.error && <p className="text-[10px] text-red-400 text-center">{trade.error}</p>}
+        {trade.status === "done" && (
+          <p className="text-[10px] text-[#10B981] text-center">
+            Filled. The fee is on its way to stakers.
+          </p>
+        )}
       </div>
     </Panel>
   );
@@ -320,7 +343,6 @@ export default function TradeSection() {
   const { address, isConnected } = useAccount();
   const [ticker, setTicker] = useState(markets[0]?.ticker ?? "AAPL");
   const [tf, setTf] = useState<HistorySpan>("1h");
-  const [price, setPrice] = useState("");
   const [tab, setTab] = useState<"mine" | "trades">("trades");
 
   const market = markets.find((m) => m.ticker === ticker) ?? markets[0];
@@ -351,7 +373,6 @@ export default function TradeSection() {
 
   const selectMarket = (m: LiveMarket) => {
     setTicker(m.ticker);
-    setPrice(m.price.toFixed(2));
   };
 
   const up = (market?.change ?? 0) >= 0;
@@ -421,7 +442,7 @@ export default function TradeSection() {
           </div>
         </Panel>
 
-        <OrderEntry market={market} price={price} setPrice={setPrice} />
+        <OrderEntry market={market} />
       </div>
 
       <div className="grid lg:grid-cols-[1fr_290px] gap-3 items-start">
@@ -519,7 +540,7 @@ export default function TradeSection() {
           </div>
         </div>
 
-        <OrderBookPanel market={market} ethUsd={ethUsd} onPrice={(p) => setPrice(p.toFixed(2))} />
+        <OrderBookPanel market={market} ethUsd={ethUsd} />
       </div>
 
       <Footer />

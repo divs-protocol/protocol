@@ -15,6 +15,12 @@ import DocsSection from "./DocsSection";
 import LandingSection from "./LandingSection";
 import MarketsSection from "./MarketsSection";
 import { compact, num, usd, useDepth, useLiveMarkets, useMarketHistory } from "@/lib/live";
+import {
+  DEFAULT_FEE_BPS,
+  ROUTER_ADDRESS,
+  SLIPPAGE_OPTIONS,
+  useRouterTrade,
+} from "@/lib/divsRouter";
 import { tickerColor } from "./ExchangeSection";
 import TradeSection from "./TradeSection";
 import AnalyticsSection from "./AnalyticsSection";
@@ -183,9 +189,15 @@ export default function AppShell({ section }: { section: string }) {
    */
   const { markets, ethUsd, window: win, loading: marketsLoading } = useLiveMarkets();
   const [ticker, setTicker] = useState("NVDA");
-  const [orderType, setOrderType] = useState("limit");
-  const [limitPrice, setLimitPrice] = useState("");
+  /**
+   * Every trade here is a swap against a pool, so there is no order book to
+   * rest a limit on and no keeper to trigger a stop. The panel offers the two
+   * things the venue can actually do.
+   */
+  const [side, setSide] = useState<"buy" | "sell">("buy");
   const [orderAmount, setOrderAmount] = useState("1");
+  const [slippage, setSlippage] = useState(0.5);
+  const trade = useRouterTrade();
 
   const selected = markets.find((m) => m.ticker === ticker) ?? markets[0];
   const book = useDepth(selected, ethUsd, 8);
@@ -219,9 +231,28 @@ export default function AppShell({ section }: { section: string }) {
   const pct = (v: number | undefined) =>
     marketsLoading ? "···" : `${(v ?? 0) >= 0 ? "+" : ""}${(v ?? 0).toFixed(2)}%`;
 
-  const orderTotal =
-    (Number(orderAmount) || 0) *
-    (orderType === "market" ? (selected?.price ?? 0) : Number(limitPrice) || selected?.price || 0);
+  const orderQty = Number(orderAmount) || 0;
+  const orderTotal = orderQty * (selected?.price ?? 0);
+
+  /**
+   * Quotes use the pool's marginal price, so they ignore the trade's own
+   * impact. What protects the trader is the minimum submitted on-chain, which
+   * is the quote less the chosen slippage - the swap reverts below it.
+   */
+  const wethPrice = ethUsd ? (selected?.price ?? 0) / ethUsd : 0;
+  const feeCost = orderTotal * (DEFAULT_FEE_BPS / 10_000);
+
+  // Buying spends WETH for shares; selling spends shares for WETH.
+  const wethIn = orderQty * wethPrice;
+  const grossOut = side === "buy" ? orderQty : orderQty * wethPrice;
+  const quoted = grossOut * (1 - DEFAULT_FEE_BPS / 10_000);
+  const minOut = quoted * (1 - slippage / 100);
+
+  const submitTrade = () => {
+    if (!selected || !wethPrice) return;
+    if (side === "buy") trade.buy(selected, wethIn, minOut);
+    else trade.sell(selected, orderQty, minOut);
+  };
 
   return (
     <NavContext.Provider value={setActiveSection}>
@@ -550,10 +581,19 @@ export default function AppShell({ section }: { section: string }) {
                   <div className="lg:col-span-4 bg-[#1B1E24] border border-[#232730] rounded-2xl p-4 flex flex-col justify-between">
                     <div>
                       <h3 className="text-white font-bold mb-2.5">Create Order</h3>
-                      <div className="grid grid-cols-3 gap-1 bg-[#14161B] p-1 rounded-xl mb-3 text-center">
-                        <button onClick={() => setOrderType("limit")} className={`py-1 rounded-lg text-[10px] font-bold transition ${orderType === "limit" ? "bg-[#10B981] text-black" : "text-gray-400 hover:text-white"}`}>Price Limit</button>
-                        <button onClick={() => setOrderType("market")} className={`py-1 rounded-lg text-[10px] font-bold transition ${orderType === "market" ? "bg-[#10B981] text-black" : "text-gray-400 hover:text-white"}`}>Market Price</button>
-                        <button onClick={() => setOrderType("stop")} className={`py-1 rounded-lg text-[10px] font-bold transition ${orderType === "stop" ? "bg-[#10B981] text-black" : "text-gray-400 hover:text-white"}`}>Stop Limit</button>
+                      <div className="grid grid-cols-2 gap-1 bg-[#14161B] p-1 rounded-xl mb-3 text-center">
+                        <button
+                          onClick={() => setSide("buy")}
+                          className={`py-1.5 rounded-lg text-[10px] font-bold transition ${side === "buy" ? "bg-[#10B981] text-black" : "text-gray-400 hover:text-white"}`}
+                        >
+                          Buy
+                        </button>
+                        <button
+                          onClick={() => setSide("sell")}
+                          className={`py-1.5 rounded-lg text-[10px] font-bold transition ${side === "sell" ? "bg-red-500 text-white" : "text-gray-400 hover:text-white"}`}
+                        >
+                          Sell
+                        </button>
                       </div>
 
                       <div className="flex items-center justify-between bg-[#14161B] border border-[#232730] p-2 rounded-xl mb-3">
@@ -575,18 +615,33 @@ export default function AppShell({ section }: { section: string }) {
                       </div>
 
                       <div className="mb-2.5">
-                        <label className="text-[9px] text-gray-500 block mb-1">
-                          {orderType === "market" ? "Market price" : "Price Limit"}
-                        </label>
+                        <label className="text-[9px] text-gray-500 block mb-1">Market price</label>
                         <div className="relative">
                           <input
-                            value={orderType === "market" ? (selected?.price ?? 0).toFixed(2) : limitPrice}
-                            onChange={(e) => setLimitPrice(e.target.value.replace(/[^0-9.]/g, ""))}
-                            readOnly={orderType === "market"}
-                            inputMode="decimal"
-                            className="w-full bg-[#14161B] border border-[#232730] rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-[#10B981] read-only:text-gray-400"
+                            value={(selected?.price ?? 0).toFixed(2)}
+                            readOnly
+                            className="w-full bg-[#14161B] border border-[#232730] rounded-xl px-3 py-1.5 text-gray-400 font-mono focus:outline-none"
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#10B981] font-bold">$</span>
+                        </div>
+                      </div>
+
+                      <div className="mb-2.5">
+                        <label className="text-[9px] text-gray-500 block mb-1">Max slippage</label>
+                        <div className="grid grid-cols-3 gap-1">
+                          {SLIPPAGE_OPTIONS.map((v) => (
+                            <button
+                              key={v}
+                              onClick={() => setSlippage(v)}
+                              className={`py-1 rounded-lg text-[10px] font-semibold transition ${
+                                slippage === v
+                                  ? "bg-[#232730] text-white"
+                                  : "bg-[#14161B] text-gray-500 hover:text-white"
+                              }`}
+                            >
+                              {v}%
+                            </button>
+                          ))}
                         </div>
                       </div>
 
@@ -605,19 +660,57 @@ export default function AppShell({ section }: { section: string }) {
                     </div>
 
                     <div>
+                      <div className="space-y-1 mb-2.5 text-[10px]">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">{side === "buy" ? "You pay" : "You sell"}</span>
+                          <span className="text-gray-300 font-mono">
+                            {side === "buy" ? px(orderTotal) : `${num(orderQty, 4)} ${selected?.ticker ?? ""}`}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Protocol fee</span>
+                          <span className="text-gray-300 font-mono">
+                            {px(feeCost)} · {(DEFAULT_FEE_BPS / 100).toFixed(2)}%
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Minimum received</span>
+                          <span className="text-gray-300 font-mono">
+                            {side === "buy"
+                              ? `${num(minOut, 4)} ${selected?.ticker ?? ""}`
+                              : `${num(minOut, 5)} WETH`}
+                          </span>
+                        </div>
+                      </div>
+
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-gray-400 text-xs">Total:</span>
                         <span className="text-[#10B981] font-extrabold text-sm">{px(orderTotal)}</span>
                       </div>
+
                       <button
-                        onClick={() =>
-                          !isConnected && openWallet()
-                        }
-                        disabled={isConnected}
-                        className="w-full bg-[#10B981] hover:bg-[#0EA372] disabled:opacity-40 disabled:cursor-not-allowed text-black font-extrabold py-2 rounded-xl transition"
+                        onClick={() => (isConnected ? submitTrade() : openWallet())}
+                        disabled={isConnected && (trade.busy || !ROUTER_ADDRESS || orderQty <= 0)}
+                        className={`w-full disabled:opacity-40 disabled:cursor-not-allowed font-extrabold py-2 rounded-xl transition ${
+                          side === "sell" && isConnected
+                            ? "bg-red-500 hover:bg-red-600 text-white"
+                            : "bg-[#10B981] hover:bg-[#0EA372] text-black"
+                        }`}
                       >
-                        {isConnected ? "Place Order" : "Connect Wallet"}
+                        {!isConnected
+                          ? "Connect Wallet"
+                          : (trade.label ??
+                            `${side === "buy" ? "Buy" : "Sell"} ${selected?.ticker ?? ""}`)}
                       </button>
+
+                      {trade.error && (
+                        <p className="mt-2 text-[10px] text-red-400 text-center">{trade.error}</p>
+                      )}
+                      {trade.status === "done" && (
+                        <p className="mt-2 text-[10px] text-[#10B981] text-center">
+                          Filled. The fee is on its way to stakers.
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
