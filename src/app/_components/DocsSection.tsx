@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNav } from "./nav";
 import Footer from "./Footer";
+import { MARKETS } from "@/lib/exchange";
 
 /**
  * Protocol documentation.
@@ -151,9 +152,9 @@ const TOPICS: Topic[] = [
     body: (a) => (
       <>
         <P>
-          Seventeen markets are live, covering individual equities, index ETFs and commodity ETFs.
-          They trade continuously: there are no market hours, and a trade settles against an
-          on-chain pool rather than through a broker.
+          {MARKETS.length} markets are live, covering individual equities, index ETFs and
+          commodity ETFs. They trade continuously: there are no market hours, and a trade settles
+          against an on-chain pool rather than through a broker.
         </P>
         <H>Assets</H>
         <P>Three assets appear in the protocol. Two of them can be staked.</P>
@@ -177,14 +178,15 @@ const TOPICS: Topic[] = [
     label: "Tokenized stocks",
     eyebrow: "The assets",
     title: "Tokenized stocks",
-    lead: "Seventeen equities and ETFs trade on the protocol as Robinhood Stock Tokens: ERC-20 contracts on Robinhood Chain that track a listed security.",
+    lead: `${MARKETS.length} equities and ETFs trade on the protocol as Robinhood Stock Tokens: ERC-20 contracts on Robinhood Chain that track a listed security.`,
     accent: ACCENTS.cyan,
     body: (a) => (
       <>
         <H>What is listed</H>
         <P>
-          Twenty tokens are issued on the chain and seventeen have a pool deep enough to trade
-          against. They cover single names, index ETFs and commodity ETFs.
+          Many more stock tokens are issued on the chain than are listed here. A market appears
+          once its pool holds liquidity, because a listing is a pool this protocol can read - not
+          a permission anyone grants.
         </P>
         <Table
           head={["Kind", "Examples"]}
@@ -624,7 +626,7 @@ EmissionNotified(amount, rate, periodFinish)`}</Pre>
 
 const META: [string, string][] = [
   ["Chain", "Robinhood (4663)"],
-  ["Markets", "17"],
+  ["Markets", String(MARKETS.length)],
   ["Pools", "2"],
   ["Max lock multiplier", "4x"],
 ];

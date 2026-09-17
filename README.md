@@ -1,9 +1,13 @@
 # DIVS Protocol
 
-Exchange for tokenized equities on Robinhood Chain (4663). Seventeen equities
-and ETFs trade against on-chain pools; the router charges a fee on the WETH side
-of every trade and forwards it to the staking vault, which distributes it to
-staked positions by weight.
+Exchange for tokenized equities on Robinhood Chain (4663). Equities and ETFs
+trade against on-chain pools; the router charges a fee on the WETH side of every
+trade and forwards it to the staking vault, which distributes it to staked
+positions by weight.
+
+The listed set is whichever Robinhood Stock Tokens have a Uniswap pool holding
+liquidity, so it grows as pools are seeded. `src/lib/exchange.ts` holds the
+registry.
 
 $DIVS is launched on Pons and is not deployed from this repository.
 
