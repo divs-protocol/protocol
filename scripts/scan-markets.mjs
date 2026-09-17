@@ -46,20 +46,43 @@ const client = createPublicClient({
   transport: http(process.env.ROBINHOOD_RPC_URL, { batch: true, timeout: 60_000 }),
 });
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * The endpoint rate-limits, and a full scan is roughly fifteen hundred calls.
+ * Without this the script dies somewhere in the middle and leaves no way to
+ * tell a token with no pool from one the RPC simply refused to answer for.
+ */
+async function withRetry(fn, attempts = 5) {
+  for (let i = 0; ; i += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      const retryable = /rate|limit|timeout|invalid parameters|unknown RPC/i.test(String(error?.message));
+      if (!retryable || i >= attempts - 1) throw error;
+      await sleep(400 * 2 ** i);
+    }
+  }
+}
+
 /** Deepest pool for a token against one quote asset, or null. */
 async function deepestPool(token, quote) {
-  const pools = await Promise.all(
-    FEES.map((fee) => client.readContract({ address: FACTORY, abi: factoryAbi, functionName: "getPool", args: [token, quote, fee] })),
+  const pools = await withRetry(() =>
+    Promise.all(
+      FEES.map((fee) => client.readContract({ address: FACTORY, abi: factoryAbi, functionName: "getPool", args: [token, quote, fee] })),
+    ),
   );
   let best = null;
   for (let i = 0; i < FEES.length; i += 1) {
     const pool = pools[i];
     if (pool === "0x0000000000000000000000000000000000000000") continue;
     try {
-      const [liquidity, token0] = await Promise.all([
-        client.readContract({ address: pool, abi: poolAbi, functionName: "liquidity" }),
-        client.readContract({ address: pool, abi: poolAbi, functionName: "token0" }),
-      ]);
+      const [liquidity, token0] = await withRetry(() =>
+        Promise.all([
+          client.readContract({ address: pool, abi: poolAbi, functionName: "liquidity" }),
+          client.readContract({ address: pool, abi: poolAbi, functionName: "token0" }),
+        ]),
+      );
       if (liquidity > 0n && (!best || liquidity > best.liquidity)) {
         best = { pool: getAddress(pool), feeBps: FEES[i], liquidity, quoteIsToken0: token0.toLowerCase() === quote.toLowerCase() };
       }
@@ -80,7 +103,7 @@ for (const t of tokens) {
   const token = getAddress(t.token);
 
   try {
-    await client.readContract({ address: token, abi: tokenAbi, functionName: "uiMultiplier" });
+    await withRetry(() => client.readContract({ address: token, abi: tokenAbi, functionName: "uiMultiplier" }), 3);
   } catch {
     notStockTokens.push(t.ticker);
     continue;
@@ -95,6 +118,8 @@ for (const t of tokens) {
   const usdg = await deepestPool(token, QUOTES.USDG);
   if (usdg) quotedInUsdg.push(t.ticker);
   else noLiquidity.push(t.ticker);
+
+  await sleep(60);
 }
 
 tradeable.sort((a, b) => (b.liquidity > a.liquidity ? 1 : -1));
