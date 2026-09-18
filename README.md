@@ -11,6 +11,10 @@ registry.
 
 $DIVS is launched on Pons and is not deployed from this repository.
 
+[SECURITY.md](SECURITY.md) is the technical and security overview: contract
+responsibilities, the invariants the test suite enforces, the approval policy,
+and the known limitations.
+
 ## Layout
 
 | Path | Contents |
