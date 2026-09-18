@@ -79,6 +79,9 @@ export type LiveMarket = Market & {
   change: number;
   /** USD traded in the window. */
   volume: number;
+  /** Volume either side of the window midpoint, for sector rotation. */
+  volumeEarly: number;
+  volumeLate: number;
   /** USD of fees that volume generated, at the pool's own fee tier. */
   fees: number;
   /** USD held by the pool contract, both sides. */
@@ -152,6 +155,8 @@ export function useLiveMarkets(refreshMs = 15_000) {
         price: 0,
         change: 0,
         volume: 0,
+        volumeEarly: 0,
+        volumeLate: 0,
         fees: 0,
         tvl: 0,
         txns: 0,

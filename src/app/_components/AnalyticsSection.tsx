@@ -13,6 +13,7 @@ import {
 import { compact, num, usd, useProtocolStats, useStaking } from "@/lib/live";
 import Footer from "./Footer";
 import MarketHeatmap from "./MarketHeatmap";
+import SectorPanels from "./SectorPanels";
 
 /**
  * Analytics - the protocol view.
@@ -129,6 +130,8 @@ export default function AnalyticsSection() {
 
       {/* where the fees came from */}
       <MarketHeatmap markets={markets} loading={loading} />
+
+      <SectorPanels markets={markets} win={win} />
 
       <Panel
         title="Pool fees by market"

@@ -147,13 +147,25 @@ export async function readEthUsd(): Promise<number> {
  * The WETH leg is the trade's value and its sign is the direction: positive
  * means WETH went into the pool, so the trader bought shares.
  */
-export function summarise(m: Market, logs: SwapLog[], ethUsd: number, points = 24) {
+export function summarise(
+  m: Market,
+  logs: SwapLog[],
+  ethUsd: number,
+  window: { from: bigint; to: bigint },
+  points = 24,
+) {
   const sorted = logs
     .slice()
     .sort((a, b) => (a.blockNumber === b.blockNumber ? 0 : a.blockNumber < b.blockNumber ? -1 : 1));
 
   let buys = 0;
   let usdVolume = 0;
+  // Volume either side of the window's midpoint. Splitting on the block range
+  // rather than on the log count keeps every market on the same clock, which is
+  // what makes sector shares comparable.
+  const midpoint = window.from + (window.to - window.from) / 2n;
+  let usdVolumeEarly = 0;
+  let usdVolumeLate = 0;
   const prices: number[] = [];
 
   for (const log of sorted) {
@@ -161,7 +173,10 @@ export function summarise(m: Market, logs: SwapLog[], ethUsd: number, points = 2
     // decimals differ between the two - so the conversion has to go through the
     // market rather than assume 1e18.
     const quoteDelta = (m.quoteIsToken0 ? log.args.amount0 : log.args.amount1) ?? 0n;
-    usdVolume += quoteToUsd(m, quoteDelta, ethUsd);
+    const value = quoteToUsd(m, quoteDelta, ethUsd);
+    usdVolume += value;
+    if (log.blockNumber < midpoint) usdVolumeEarly += value;
+    else usdVolumeLate += value;
     // Quote flowing into the pool is someone buying the share.
     if (quoteDelta > 0n) buys += 1;
     prices.push(usdPerShare(m, log.args.sqrtPriceX96 ?? 0n, ethUsd));
@@ -182,6 +197,8 @@ export function summarise(m: Market, logs: SwapLog[], ethUsd: number, points = 2
   return {
     change: open ? ((close - open) / open) * 100 : 0,
     usdVolume,
+    usdVolumeEarly,
+    usdVolumeLate,
     // feeBps is in hundredths of a basis point, as Uniswap stores it.
     usdFees: (usdVolume * m.feeBps) / 1_000_000,
     txns: sorted.length,

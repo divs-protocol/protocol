@@ -31,6 +31,9 @@ export type MarketRow = {
   price: number;
   change: number;
   volume: number;
+  /** Volume either side of the window midpoint, for rotation. */
+  volumeEarly: number;
+  volumeLate: number;
   fees: number;
   tvl: number;
   txns: number;
@@ -65,7 +68,7 @@ export async function loadMarketsSnapshot(): Promise<MarketsSnapshot> {
 
   const markets: MarketRow[] = MARKETS.map((m) => {
     const state = states.get(m.ticker);
-    const flow = summarise(m, grouped.get(m.pool.toLowerCase()) ?? [], ethUsd);
+    const flow = summarise(m, grouped.get(m.pool.toLowerCase()) ?? [], ethUsd, { from, to: head });
     const price = state ? usdPerShare(m, state.sqrtPriceX96, ethUsd) : 0;
     const tvl = state
       ? quoteToUsd(m, state.quote, ethUsd) + (Number(state.token) / 1e18) * price
@@ -83,6 +86,8 @@ export async function loadMarketsSnapshot(): Promise<MarketsSnapshot> {
       price,
       change: flow.change,
       volume: flow.usdVolume,
+      volumeEarly: flow.usdVolumeEarly,
+      volumeLate: flow.usdVolumeLate,
       fees: flow.usdFees,
       tvl,
       txns: flow.txns,
