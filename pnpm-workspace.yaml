@@ -1,4 +1,12 @@
+# Which dependencies may run install scripts.
+#
+# pnpm writes "set this to true or false" here when it meets a new one, and
+# that literal string is a parse error rather than a value - a deploy fails on
+# it during install, before the build starts. Every entry must be a boolean.
 allowBuilds:
-  '@reown/appkit': set this to true or false
-  secp256k1: set this to true or false
+  # A version-notice script, not a build step.
+  '@reown/appkit': false
+  # Native bindings, with a pure-JS fallback when they are absent. Declined so
+  # a deploy never depends on a compiler being present in the build image.
+  secp256k1: false
   unrs-resolver: true
