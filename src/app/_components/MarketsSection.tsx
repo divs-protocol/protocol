@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Search, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
 import { compact, num, usd, useLiveMarkets } from "@/lib/live";
 import { takeFocusedMarket } from "@/lib/marketFocus";
+import MarketsHero from "./MarketsHero";
 import TokenPage from "./TokenPage";
 import Footer from "./Footer";
 
@@ -45,27 +46,6 @@ function sparkPath(series: number[], w = 62, h = 20) {
       return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(" ");
-}
-
-function Stat({
-  label,
-  value,
-  accent,
-  loading,
-}: {
-  label: string;
-  value: string;
-  accent?: boolean;
-  loading?: boolean;
-}) {
-  return (
-    <div className="bg-[#14161B] border border-[#232730] rounded-2xl p-4">
-      <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1.5">{label}</div>
-      <div className={`font-mono text-xl ${accent ? "text-[#10B981]" : "text-white"}`}>
-        {loading ? <span className="text-gray-600">···</span> : value}
-      </div>
-    </div>
-  );
 }
 
 function SortHeader({
@@ -150,30 +130,15 @@ export default function MarketsSection() {
 
   return (
     <div className="space-y-4">
-      {/* What this page is, before the table of numbers that follows it. */}
-      <section className="pt-8 pb-2 sm:pt-12 sm:pb-4">
-        <h1 className="text-white font-bold tracking-tight text-[2rem] sm:text-[2.75rem] lg:text-5xl leading-[1.08] max-w-[20ch]">
-          Every listed market, read from its own pool.
-        </h1>
-
-        <p className="text-[14px] sm:text-[15px] text-gray-400 leading-relaxed mt-5 max-w-[58ch]">
-          {markets.length} tokenized equities and funds on Robinhood Chain. Price comes from each
-          pool&apos;s current tick, depth from what the contract holds, volume and trade count from
-          its own swap log. Nothing on this page is quoted by a vendor.
-        </p>
-
-        <p className="text-[12px] text-gray-500 mt-3 max-w-[58ch]">
-          Select a market to open its chart, its tape and the insider filings for the company behind
-          it.
-        </p>
-      </section>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Markets listed" value={String(markets.length)} />
-        <Stat label={`Volume ${win}`} value={compact(totals.volume)} loading={loading} />
-        <Stat label={`Pool fees ${win}`} value={compact(totals.fees)} accent loading={loading} />
-        <Stat label="Pool liquidity" value={compact(totals.tvl)} loading={loading} />
-      </div>
+      <MarketsHero
+        markets={markets}
+        volume={totals.volume}
+        fees={totals.fees}
+        tvl={totals.tvl}
+        win={win}
+        loading={loading}
+        onSelect={setSelected}
+      />
 
       <div className="flex flex-col md:flex-row md:items-center gap-3">
         <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">

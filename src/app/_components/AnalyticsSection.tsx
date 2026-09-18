@@ -82,7 +82,7 @@ function Panel({
 }
 
 export default function AnalyticsSection() {
-  const { markets, volume, fees, tvl, txns, buys, sells, active, byFees, window, loading } =
+  const { markets, volume, fees, tvl, txns, buys, sells, byFees, window, loading } =
     useProtocolStats();
   const { staking } = useStaking();
 
@@ -104,26 +104,16 @@ export default function AnalyticsSection() {
 
   return (
     <div className="space-y-4">
-      <AnalyticsHero markets={markets} />
-
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <Stat
-          label={`Pool fees ${win}`}
-          value={compact(fees)}
-          accent
-          sub="to pool LPs, not stakers"
-          loading={loading}
-        />
-        <Stat label={`Volume ${win}`} value={compact(volume)} sub="across all markets" loading={loading} />
-        <Stat label="Pool liquidity" value={compact(tvl)} sub="both sides, all pools" loading={loading} />
-        <Stat label={`Trades ${win}`} value={num(txns)} sub={`${active} markets active`} loading={loading} />
-        <Stat
-          label="Effective fee rate"
-          value={`${feeRate.toFixed(3)}%`}
-          sub="fees over volume"
-          loading={loading}
-        />
-      </div>
+      <AnalyticsHero
+        markets={markets}
+        volume={volume}
+        fees={fees}
+        tvl={tvl}
+        txns={txns}
+        feeRate={feeRate}
+        win={win}
+        loading={loading}
+      />
 
       {/* the sentence first: what happened, and which markets caused it */}
       <SessionSummary

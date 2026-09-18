@@ -1,19 +1,24 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Search } from "lucide-react";
+import { Activity, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { MARKETS } from "@/lib/exchange";
 import { FILERS } from "@/lib/ciks";
 import { focusMarket } from "@/lib/marketFocus";
-import { usd, type LiveMarket } from "@/lib/live";
+import { compact, num, usd, type LiveMarket } from "@/lib/live";
+import PageHero, { Eyebrow, HeroCard, HeroStat } from "./PageHero";
 
 /**
- * The top of Analytics: what this page covers, and a way into it.
+ * The top of Analytics: what this page covers, and the tape as it stands.
  *
- * The three figures are counted from the registry rather than written down, so
- * a scan that adds markets moves them and they cannot drift into being a claim
- * the application no longer supports.
+ * The right column is the session in numbers, which is the question this page
+ * exists to answer. It replaces the row of tiles that used to sit underneath,
+ * rather than repeating it.
+ *
+ * The three figures on the left are counted from the registry and the filer map
+ * rather than written down, so a scan that adds markets moves them and they
+ * cannot drift into being a claim the page no longer supports.
  */
 
 const MARKET_COUNT = MARKETS.length;
@@ -36,31 +41,124 @@ function search(markets: LiveMarket[], query: string) {
   return [...starts, ...contains].slice(0, 6);
 }
 
-/**
- * One figure in the strip that closes the hero.
- *
- * The strip runs the full width of the page rather than sitting under the text
- * column, so the hero has a base that lines up with the panels below it instead
- * of trailing off into empty space on the right.
- */
-function Figure({ value, label, first }: { value: string; label: string; first?: boolean }) {
+function Reading({
+  label,
+  value,
+  sub,
+  accent,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  accent?: boolean;
+}) {
   return (
-    <div
-      className={
-        first
-          ? "py-5 sm:py-7"
-          : "py-5 sm:py-7 sm:border-l sm:border-[#232730] sm:pl-8 lg:pl-10"
-      }
-    >
-      <div className="text-white font-bold tracking-tight text-3xl sm:text-4xl tabular-nums">
+    <div>
+      <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">{label}</div>
+      <div className={`font-mono text-[15px] ${accent ? "text-[#10B981]" : "text-white"}`}>
         {value}
       </div>
-      <div className="text-[11px] text-gray-500 leading-snug mt-1.5 max-w-[26ch]">{label}</div>
+      {sub && <div className="text-[9px] text-gray-600 mt-0.5">{sub}</div>}
     </div>
   );
 }
 
-export default function AnalyticsHero({ markets }: { markets: LiveMarket[] }) {
+/** The session as it stands: breadth, then the flow that produced it. */
+function TapeCard({
+  markets,
+  volume,
+  fees,
+  tvl,
+  txns,
+  feeRate,
+  win,
+  loading,
+}: {
+  markets: LiveMarket[];
+  volume: number;
+  fees: number;
+  tvl: number;
+  txns: number;
+  feeRate: number;
+  win: string;
+  loading: boolean;
+}) {
+  const breadth = useMemo(() => {
+    let up = 0;
+    let down = 0;
+    let quiet = 0;
+    for (const m of markets) {
+      if (!m.txns) quiet += 1;
+      else if (m.change > 0.001) up += 1;
+      else if (m.change < -0.001) down += 1;
+      else quiet += 1;
+    }
+    return { up, down, quiet, total: up + down + quiet || 1 };
+  }, [markets]);
+
+  const dash = loading ? "···" : undefined;
+
+  return (
+    <HeroCard
+      title="The tape right now"
+      icon={<Activity size={13} className="text-[#10B981]" />}
+      right={<span className="font-mono text-[10px] text-gray-500">last {win}</span>}
+    >
+      <div className="flex h-1.5 rounded-full overflow-hidden bg-[#0E1013] mb-2.5">
+        <span
+          className="bg-[#10B981]"
+          style={{ width: `${(breadth.up / breadth.total) * 100}%` }}
+        />
+        <span
+          className="bg-[#2C313B]"
+          style={{ width: `${(breadth.quiet / breadth.total) * 100}%` }}
+        />
+        <span
+          className="bg-[#F43F5E]"
+          style={{ width: `${(breadth.down / breadth.total) * 100}%` }}
+        />
+      </div>
+
+      <div className="flex items-center justify-between font-mono text-[10px] mb-4">
+        <span className="text-[#10B981]">{breadth.up} advancing</span>
+        <span className="text-gray-500">{breadth.quiet} untraded</span>
+        <span className="text-[#F43F5E]">{breadth.down} declining</span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3.5 pt-3.5 border-t border-[#232730]">
+        <Reading label="Volume" value={dash ?? compact(volume)} />
+        <Reading label="Trades" value={dash ?? num(txns)} />
+        <Reading
+          label="Pool fees"
+          value={dash ?? compact(fees)}
+          sub={dash ? undefined : `${feeRate.toFixed(3)}% of volume`}
+          accent
+        />
+        <Reading label="Pool liquidity" value={dash ?? compact(tvl)} />
+      </div>
+    </HeroCard>
+  );
+}
+
+export default function AnalyticsHero({
+  markets,
+  volume,
+  fees,
+  tvl,
+  txns,
+  feeRate,
+  win,
+  loading,
+}: {
+  markets: LiveMarket[];
+  volume: number;
+  fees: number;
+  tvl: number;
+  txns: number;
+  feeRate: number;
+  win: string;
+  loading: boolean;
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -78,87 +176,97 @@ export default function AnalyticsHero({ markets }: { markets: LiveMarket[] }) {
   };
 
   return (
-    <section className="pt-8 pb-2 sm:pt-14 sm:pb-4">
-      <h1 className="text-white font-bold tracking-tight text-[2.25rem] sm:text-5xl lg:text-6xl leading-[1.06] max-w-[21ch]">
-        The Robinhood Chain equities market, explained.
-      </h1>
+    <PageHero
+      glow="80% 8%"
+      left={
+        <div>
+          <Eyebrow>Robinhood Chain · 4663</Eyebrow>
 
-      <p className="text-[14px] sm:text-[16px] text-gray-400 leading-relaxed mt-5 sm:mt-6 max-w-[56ch]">
-        Live prices, pool depth and insider filings across every tokenized equity and fund with a
-        market on chain. Read from the pools themselves, not from a vendor feed.
-      </p>
+          <h1 className="text-white font-bold tracking-tight text-3xl md:text-5xl leading-[1.06] mb-5">
+            The Robinhood Chain
+            <br className="hidden md:inline" />
+            equities market, explained.
+          </h1>
 
-      <div className="flex flex-col sm:flex-row gap-2 mt-7 sm:mt-9 max-w-[44rem]">
-        <div className="relative flex-1 min-w-0">
-          <Search
-            size={15}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none"
-          />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setOpen(true);
-            }}
-            onFocus={() => setOpen(true)}
-            // A click on a result fires after the blur, so the close waits long
-            // enough for the selection to land.
-            onBlur={() => {
-              blurTimer.current = setTimeout(() => setOpen(false), 120);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && results[0]) go(results[0].ticker);
-              if (e.key === "Escape") setOpen(false);
-            }}
-            placeholder="Search stocks by name or ticker…"
-            className="w-full bg-[#14161B] border border-[#232730] rounded-xl pl-10 pr-4 py-3 text-[13px] text-white placeholder:text-gray-500 outline-none focus:border-[#10B981]/50 transition"
-          />
+          <p className="text-sm md:text-[15px] leading-relaxed text-gray-400 max-w-lg mb-8">
+            Live prices, pool depth and insider filings across every tokenized equity and fund with
+            a market on chain. Read from the pools themselves, not from a vendor feed.
+          </p>
 
-          {open && results.length > 0 && (
-            <div className="absolute z-20 left-0 right-0 top-full mt-1.5 bg-[#14161B] border border-[#232730] rounded-xl overflow-hidden shadow-xl shadow-black/40">
-              {results.map((m) => (
-                <button
-                  key={m.ticker}
-                  // Selection happens on mousedown, which fires before the
-                  // input's blur. On click it is a race against the close.
-                  // Preventing the default also stops the blur entirely.
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    clearTimeout(blurTimer.current);
-                    go(m.ticker);
-                  }}
-                  className="w-full flex items-center gap-3 px-3.5 py-2.5 hover:bg-[#1B1E24] transition text-left border-b border-[#1F2228] last:border-0"
-                >
-                  <span className="font-mono text-[11px] font-semibold text-white w-14 shrink-0">
-                    {m.ticker}
-                  </span>
-                  <span className="text-[11px] text-gray-400 truncate flex-1 min-w-0">{m.name}</span>
-                  <span className="font-mono text-[11px] text-gray-300 shrink-0">
-                    {m.price ? usd(m.price) : "—"}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="relative max-w-md mb-8">
+            <Search
+              size={15}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none"
+            />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setOpen(true);
+              }}
+              onFocus={() => setOpen(true)}
+              // A click on a result fires after the blur, so the close waits
+              // long enough for the selection to land.
+              onBlur={() => {
+                blurTimer.current = setTimeout(() => setOpen(false), 120);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && results[0]) go(results[0].ticker);
+                if (e.key === "Escape") setOpen(false);
+              }}
+              placeholder="Search stocks by name or ticker…"
+              className="w-full bg-[#14161B] border border-[#232730] rounded-xl pl-10 pr-4 py-3 text-[13px] text-white placeholder:text-gray-500 outline-none focus:border-[#10B981]/50 transition"
+            />
+
+            {open && results.length > 0 && (
+              <div className="absolute z-20 left-0 right-0 top-full mt-1.5 bg-[#14161B] border border-[#232730] rounded-xl overflow-hidden shadow-xl shadow-black/40">
+                {results.map((m) => (
+                  <button
+                    key={m.ticker}
+                    // Selection happens on mousedown, which fires before the
+                    // input's blur. On click it is a race against the close.
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      clearTimeout(blurTimer.current);
+                      go(m.ticker);
+                    }}
+                    className="w-full flex items-center gap-3 px-3.5 py-2.5 hover:bg-[#1B1E24] transition text-left border-b border-[#1F2228] last:border-0"
+                  >
+                    <span className="font-mono text-[11px] font-semibold text-white w-14 shrink-0">
+                      {m.ticker}
+                    </span>
+                    <span className="text-[11px] text-gray-400 truncate flex-1 min-w-0">
+                      {m.name}
+                    </span>
+                    <span className="font-mono text-[11px] text-gray-300 shrink-0">
+                      {m.price ? usd(m.price) : "—"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-x-10 gap-y-4">
+            <HeroStat value="1" label="Chain covered in depth" />
+            <HeroStat value={String(MARKET_COUNT)} label="Markets in the live heatmap" />
+            <HeroStat value={String(FILER_COUNT)} label="Companies with insider filings" />
+          </div>
         </div>
-
-        {/* One chain, so this states which rather than offering a choice that
-            does not exist. */}
-        <div className="flex items-center gap-2 px-4 py-3 bg-[#14161B] border border-[#232730] rounded-xl shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" />
-          <span className="text-[12px] text-[#10B981] font-semibold whitespace-nowrap">
-            Robinhood Chain
-          </span>
-          <span className="font-mono text-[11px] text-gray-500">4663</span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 mt-10 sm:mt-14 border-t border-[#232730]">
-        <Figure first value="1" label="Chain covered in depth, Robinhood Chain" />
-        <Figure value={String(MARKET_COUNT)} label="Markets tracked in the live heatmap" />
-        <Figure value={String(FILER_COUNT)} label="Companies with insider filings on file" />
-      </div>
-    </section>
+      }
+      right={
+        <TapeCard
+          markets={markets}
+          volume={volume}
+          fees={fees}
+          tvl={tvl}
+          txns={txns}
+          feeRate={feeRate}
+          win={win}
+          loading={loading}
+        />
+      }
+    />
   );
 }

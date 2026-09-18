@@ -26,6 +26,7 @@ import {
 import { useConnectWallet } from "./wallet";
 import ConnectPrompt from "./ConnectPrompt";
 import Footer from "./Footer";
+import TradeHero from "./TradeHero";
 
 
 /**
@@ -380,27 +381,7 @@ export default function TradeSection() {
 
   return (
     <div className="space-y-4">
-      {/* What the book on this page is, given there is no resting order book
-          on chain to show. */}
-      <section className="pt-8 pb-2 sm:pt-12 sm:pb-4">
-        <h1 className="text-white font-bold tracking-tight text-[2rem] sm:text-[2.75rem] lg:text-5xl leading-[1.08] max-w-[20ch]">
-          Depth of book, from the pool itself.
-        </h1>
-
-        <p className="text-[14px] sm:text-[15px] text-gray-400 leading-relaxed mt-5 max-w-[58ch]">
-          Nothing rests on an order book here. Each level is derived from the pool&apos;s own
-          liquidity: the size that moves the price a given distance, which is what a book tells you
-          anyway. Quotes use the pool&apos;s marginal price, so the minimum you submit is what
-          protects you from the rest.
-        </p>
-
-        <p className="text-[12px] text-gray-500 mt-3 max-w-[58ch]">
-          Every fill pays a protocol fee on the quote side of the trade, and that fee is
-          distributed to staked $DIVS.
-          {!ROUTER_ADDRESS &&
-            " The router is not deployed yet, so prices and quotes are live but the order cannot be submitted."}
-        </p>
-      </section>
+      <TradeHero market={market} markets={markets} />
 
       <div className="grid lg:grid-cols-[210px_1fr_290px] gap-3 items-start">
         <MarketList markets={markets} active={market} onSelect={selectMarket} />
