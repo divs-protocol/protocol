@@ -36,13 +36,26 @@ function search(markets: LiveMarket[], query: string) {
   return [...starts, ...contains].slice(0, 6);
 }
 
-function Figure({ value, label }: { value: string; label: string }) {
+/**
+ * One figure in the strip that closes the hero.
+ *
+ * The strip runs the full width of the page rather than sitting under the text
+ * column, so the hero has a base that lines up with the panels below it instead
+ * of trailing off into empty space on the right.
+ */
+function Figure({ value, label, first }: { value: string; label: string; first?: boolean }) {
   return (
-    <div>
+    <div
+      className={
+        first
+          ? "py-5 sm:py-7"
+          : "py-5 sm:py-7 sm:border-l sm:border-[#232730] sm:pl-8 lg:pl-10"
+      }
+    >
       <div className="text-white font-bold tracking-tight text-3xl sm:text-4xl tabular-nums">
         {value}
       </div>
-      <div className="text-[11px] text-gray-500 leading-snug mt-1 max-w-[22ch]">{label}</div>
+      <div className="text-[11px] text-gray-500 leading-snug mt-1.5 max-w-[26ch]">{label}</div>
     </div>
   );
 }
@@ -65,17 +78,17 @@ export default function AnalyticsHero({ markets }: { markets: LiveMarket[] }) {
   };
 
   return (
-    <div className="pt-2 pb-1">
-      <h1 className="text-white font-bold tracking-tight text-3xl sm:text-5xl leading-[1.05] max-w-[18ch]">
+    <section className="pt-8 pb-2 sm:pt-14 sm:pb-4">
+      <h1 className="text-white font-bold tracking-tight text-[2.25rem] sm:text-5xl lg:text-6xl leading-[1.06] max-w-[21ch]">
         The Robinhood Chain equities market, explained.
       </h1>
 
-      <p className="text-[13px] sm:text-[15px] text-gray-400 leading-relaxed mt-4 max-w-[62ch]">
+      <p className="text-[14px] sm:text-[16px] text-gray-400 leading-relaxed mt-5 sm:mt-6 max-w-[56ch]">
         Live prices, pool depth and insider filings across every tokenized equity and fund with a
         market on chain. Read from the pools themselves, not from a vendor feed.
       </p>
 
-      <div className="flex flex-col sm:flex-row gap-2 mt-6 max-w-[42rem]">
+      <div className="flex flex-col sm:flex-row gap-2 mt-7 sm:mt-9 max-w-[44rem]">
         <div className="relative flex-1 min-w-0">
           <Search
             size={15}
@@ -141,11 +154,11 @@ export default function AnalyticsHero({ markets }: { markets: LiveMarket[] }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 mt-8">
-        <Figure value="1" label="Chain covered in depth, Robinhood Chain" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 mt-10 sm:mt-14 border-t border-[#232730]">
+        <Figure first value="1" label="Chain covered in depth, Robinhood Chain" />
         <Figure value={String(MARKET_COUNT)} label="Markets tracked in the live heatmap" />
         <Figure value={String(FILER_COUNT)} label="Companies with insider filings on file" />
       </div>
-    </div>
+    </section>
   );
 }

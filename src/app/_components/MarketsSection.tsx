@@ -150,12 +150,23 @@ export default function MarketsSection() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-white font-bold tracking-tight text-xl mb-1">Markets</h2>
-        <p className="text-[11px] text-gray-500">
-          Every listed market, read live from its pool. Select one to open it.
+      {/* What this page is, before the table of numbers that follows it. */}
+      <section className="pt-8 pb-2 sm:pt-12 sm:pb-4">
+        <h1 className="text-white font-bold tracking-tight text-[2rem] sm:text-[2.75rem] lg:text-5xl leading-[1.08] max-w-[20ch]">
+          Every listed market, read from its own pool.
+        </h1>
+
+        <p className="text-[14px] sm:text-[15px] text-gray-400 leading-relaxed mt-5 max-w-[58ch]">
+          {markets.length} tokenized equities and funds on Robinhood Chain. Price comes from each
+          pool&apos;s current tick, depth from what the contract holds, volume and trade count from
+          its own swap log. Nothing on this page is quoted by a vendor.
         </p>
-      </div>
+
+        <p className="text-[12px] text-gray-500 mt-3 max-w-[58ch]">
+          Select a market to open its chart, its tape and the insider filings for the company behind
+          it.
+        </p>
+      </section>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Markets listed" value={String(markets.length)} />
