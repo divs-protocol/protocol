@@ -1,54 +1,42 @@
-import { createConfig, http } from "wagmi";
-import { hardhat, robinhood } from "wagmi/chains";
-import { injected } from "wagmi/connectors";
+import { cookieStorage, createStorage } from "wagmi";
+import { hardhat, robinhood } from "@reown/appkit/networks";
+import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
+import { http } from "viem";
+
+/**
+ * Wallet connection through Reown AppKit.
+ *
+ * AppKit supplies the connect modal every wallet already knows how to answer:
+ * installed extensions detected and badged, a QR code for a desktop-to-phone
+ * session, and deep links into wallet apps on mobile. A hand-written picker
+ * cannot do the last of those - a phone's browser has no injected provider, so
+ * without deep links mobile visitors have nothing to connect with.
+ */
+
+export const SITE_URL = "https://www.divsprotocol.com";
+
+/**
+ * Public by design: it is compiled into the browser bundle and readable by
+ * anyone who opens the site. What it carries is quota, which is defended by
+ * Allowed Domains in the Reown dashboard rather than by hiding the value.
+ */
+export const WC_PROJECT_ID =
+  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "3582d51bb0cbc7ebd35c7d75a2899ec4";
 
 /**
  * A local `hardhat node` is a development convenience, not something a
- * production deployment should advertise. It is included when running
- * `next dev`, or when NEXT_PUBLIC_ENABLE_LOCAL_CHAIN is set for a preview
- * build pointed at a shared devnet.
+ * production deployment should advertise.
  */
 const includeLocalChain =
   process.env.NODE_ENV !== "production" ||
   process.env.NEXT_PUBLIC_ENABLE_LOCAL_CHAIN === "true";
 
 const localRpcUrl = process.env.NEXT_PUBLIC_LOCAL_RPC_URL ?? "http://127.0.0.1:8545";
-
-/**
- * The origin the app is actually served from.
- *
- * In the browser this is the real origin, so it is right on the production
- * domain, on a preview deployment and on localhost without configuration. The
- * constant only covers the server render, where there is no location to read.
- */
-export const SITE_URL = "https://www.divsprotocol.com";
-
-/**
- * A browser-extension wallet only.
- *
- * WalletConnect was here so a phone could connect - a phone's browser has no
- * injected provider - and was removed deliberately. Mobile visitors can connect
- * only from inside a wallet app's own browser.
- */
-const connectors = [injected()];
-
-const sharedOptions = {
-  connectors,
-  /**
-   * `ssr: true` stops wagmi from reading persisted storage during the server
-   * render, so the server and the first client render agree (disconnected) and
-   * reconnection happens after hydration. Without it the app has to be gated
-   * behind a `mounted` flag, which ships a blank first paint.
-   */
-  ssr: true,
-} as const;
-
-/**
- * The protocol lives on Robinhood Chain, where the stock tokens are issued.
- * Ethereum mainnet and Sepolia were create-next-app defaults and nothing in the
- * app is deployed to them.
- */
 const robinhoodRpcUrl = process.env.NEXT_PUBLIC_ROBINHOOD_RPC_URL;
+
+export const networks = includeLocalChain
+  ? ([robinhood, hardhat] as const)
+  : ([robinhood] as const);
 
 /**
  * In the browser every read goes through `/api/rpc`. The public endpoint sends
@@ -56,42 +44,32 @@ const robinhoodRpcUrl = process.env.NEXT_PUBLIC_ROBINHOOD_RPC_URL;
  * direct transport returns nothing and the whole UI renders empty. On the
  * server there is no CORS, so the chain is called directly.
  *
- * Requests are batched into one HTTP call each tick. Seventeen markets read
+ * Requests are batched into one HTTP call each tick; ninety-eight markets read
  * one at a time is a burst the public endpoint answers with 429.
- *
- * `http(undefined, ...)` is deliberate: viem falls back to the chain's default
- * RPC only when the url is undefined, and there is no overload that takes
- * options without it.
  */
-/**
- * 30s, not viem's default 10s. A `getLogs` over tens of thousands of blocks
- * takes seconds upstream and may queue behind other calls in the proxy; at the
- * default it was aborted mid-flight and the flow columns silently stayed empty.
- */
-const transportOptions = { batch: true, timeout: 30_000 } as const;
-
 const robinhoodTransport =
   typeof window === "undefined"
     ? robinhoodRpcUrl
-      ? http(robinhoodRpcUrl, transportOptions)
-      : http(undefined, transportOptions)
-    : http("/api/rpc", transportOptions);
+      ? http(robinhoodRpcUrl, { batch: true })
+      : http(undefined, { batch: true })
+    : http("/api/rpc", { batch: true });
 
-const remoteTransports = {
-  [robinhood.id]: robinhoodTransport,
-} as const;
+export const wagmiAdapter = new WagmiAdapter({
+  projectId: WC_PROJECT_ID,
+  networks: [...networks],
+  transports: includeLocalChain
+    ? { [robinhood.id]: robinhoodTransport, [hardhat.id]: http(localRpcUrl) }
+    : { [robinhood.id]: robinhoodTransport },
+  /**
+   * Cookie storage so the server render and the first client render agree on
+   * the connection state, rather than the app flashing disconnected and then
+   * correcting itself after hydration.
+   */
+  ssr: true,
+  storage: createStorage({ storage: cookieStorage }),
+});
 
-export const config = includeLocalChain
-  ? createConfig({
-      ...sharedOptions,
-      chains: [robinhood, hardhat],
-      transports: { ...remoteTransports, [hardhat.id]: http(localRpcUrl) },
-    })
-  : createConfig({
-      ...sharedOptions,
-      chains: [robinhood],
-      transports: remoteTransports,
-    });
+export const config = wagmiAdapter.wagmiConfig;
 
 declare module "wagmi" {
   interface Register {
