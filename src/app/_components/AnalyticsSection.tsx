@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { compact, num, usd, useProtocolStats, useStaking } from "@/lib/live";
 import Footer from "./Footer";
+import MarketHeatmap from "./MarketHeatmap";
 
 /**
  * Analytics - the protocol view.
@@ -85,8 +86,8 @@ export default function AnalyticsSection() {
   const feeRate = volume ? (fees / volume) * 100 : 0;
   const buyShare = buys + sells ? buys / (buys + sells) : 0.5;
 
-  // Pool fees are concentrated in a handful of markets; a chart of all
-  // seventeen is mostly empty bars, so this shows the ones that produced it.
+  // Pool fees are concentrated in a handful of markets; a chart of every one
+  // is mostly empty bars, so this shows the ones that produced it.
   const chartData = useMemo(
     () => byFees.filter((m) => m.fees > 0).slice(0, 10),
     [byFees],
@@ -127,6 +128,8 @@ export default function AnalyticsSection() {
       </div>
 
       {/* where the fees came from */}
+      <MarketHeatmap markets={markets} loading={loading} />
+
       <Panel
         title="Pool fees by market"
         right={<span className="font-mono text-[10px] text-gray-500">last {win}</span>}
