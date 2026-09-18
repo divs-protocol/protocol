@@ -41,9 +41,9 @@ type Bubble = { m: LiveMarket; r: number; x: number; y: number; change: number }
  * clears everything already down. Not an optimal pack, but stable and cheap,
  * and with a hundred markets the gaps read as deliberate spacing.
  */
-function pack(items: { m: LiveMarket; r: number }[], width: number, height: number): Bubble[] {
+function pack(items: { m: LiveMarket; r: number }[], width: number, height: number): Bubble[] | null {
   const out: Bubble[] = [];
-  const step = 8;
+  const step = 10;
 
   for (const item of items) {
     let best: { x: number; y: number; d: number } | null = null;
@@ -66,9 +66,32 @@ function pack(items: { m: LiveMarket; r: number }[], width: number, height: numb
       }
     }
 
-    if (best) out.push({ m: item.m, r: item.r, x: best.x, y: best.y, change: item.m.change });
+    if (!best) return null;
+    out.push({ m: item.m, r: item.r, x: best.x, y: best.y, change: item.m.change });
   }
   return out;
+}
+
+/**
+ * Packs everything, shrinking until it fits.
+ *
+ * A single pass drops whatever it cannot place, and dropping is the one thing
+ * this chart must never do - thirty-seven markets disappeared from a
+ * ninety-eight market map that way, silently. Failing to place one bubble now
+ * shrinks them all and starts over.
+ */
+function packAll(items: { m: LiveMarket; r: number }[], width: number, height: number): Bubble[] {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const scale = 0.93 ** attempt;
+    const placed = pack(
+      items.map((i) => ({ ...i, r: Math.max(13, i.r * scale) })),
+      width,
+      height,
+    );
+    if (placed) return placed;
+  }
+  // Last resort: uniform small circles, which always fit.
+  return pack(items.map((i) => ({ ...i, r: 13 })), width, height) ?? [];
 }
 
 export default function MarketHeatmap({
@@ -105,18 +128,31 @@ export default function MarketHeatmap({
   }, [markets]);
 
   const WIDTH = 960;
-  const HEIGHT = 420;
+  const HEIGHT = 620;
 
   const bubbles = useMemo(() => {
     if (!shown.length) return [];
-    // Size by liquidity, which is what decides whether a market can absorb a
-    // trade. Square root keeps the biggest pool from swallowing the canvas.
-    const max = Math.max(...shown.map((m) => m.tvl), 1);
+    /*
+     * Size by liquidity, on a log scale.
+     *
+     * Liquidity spans three orders of magnitude - a six-million-dollar pool
+     * against a twenty-thousand-dollar one - so a linear or square-root scale
+     * pins almost every market to the minimum radius and leaves eighty of them
+     * as identical unlabelled blobs. Log ranking keeps the biggest markets
+     * dominant while giving the rest enough room to carry their ticker.
+     */
+    const tvls = shown.map((m) => Math.max(m.tvl, 1));
+    const hi = Math.log(Math.max(...tvls));
+    const lo = Math.log(Math.min(...tvls));
+    const span = hi - lo || 1;
     const items = shown
       .slice()
       .sort((a, b) => b.tvl - a.tvl)
-      .map((m) => ({ m, r: Math.max(16, Math.sqrt(m.tvl / max) * 62) }));
-    return pack(items, WIDTH, HEIGHT);
+      .map((m) => ({
+        m,
+        r: 19 + ((Math.log(Math.max(m.tvl, 1)) - lo) / span) ** 1.6 * 46,
+      }));
+    return packAll(items, WIDTH, HEIGHT);
   }, [shown]);
 
   const total = breadth.up + breadth.down + breadth.quiet || 1;
@@ -169,49 +205,47 @@ export default function MarketHeatmap({
 
       <div className="overflow-x-auto scrollbar-none">
         {loading && !bubbles.length ? (
-          <div className="h-[420px] flex items-center justify-center text-[11px] text-gray-600">
+          <div className="h-[620px] flex items-center justify-center text-[11px] text-gray-600">
             Reading the pools…
           </div>
         ) : (
-          <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full min-w-[640px]" role="img"
+          <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full min-w-[720px]" role="img"
                aria-label={`${bubbles.length} markets by liquidity and price change`}>
             {bubbles.map((b) => {
               const t = tone(b.change, b.m.txns > 0);
-              // Below this the ticker does not fit, so the label is dropped
-              // rather than overflowing its circle.
-              const showLabel = b.r >= 22;
+              // Every bubble carries its ticker; only the larger ones have
+              // room for a second line underneath it.
+              const showDetail = b.r >= 26;
               return (
                 <g key={b.m.ticker}>
                   <circle cx={b.x} cy={b.y} r={b.r} fill={t.fill} stroke={t.stroke} strokeWidth={1} />
-                  {showLabel && (
-                    <>
-                      <text
-                        x={b.x}
-                        y={b.y - 1}
-                        textAnchor="middle"
-                        fill={t.text}
-                        fontSize={Math.min(b.r / 2.6, 15)}
-                        fontWeight={700}
-                      >
-                        {b.m.ticker}
-                      </text>
-                      <text
-                        x={b.x}
-                        y={b.y + Math.min(b.r / 2.2, 14)}
-                        textAnchor="middle"
-                        fill={t.text}
-                        fontSize={Math.min(b.r / 3.4, 11)}
-                        fontFamily="ui-monospace, monospace"
-                        opacity={0.85}
-                      >
-                        {/* A market with no trades has no change to report, so
-                            it shows its price rather than a 0.00% that looks
-                            like a measurement. */}
-                        {b.m.txns
-                          ? `${b.change >= 0 ? "+" : ""}${b.change.toFixed(2)}%`
-                          : usd(b.m.price)}
-                      </text>
-                    </>
+                  <text
+                    x={b.x}
+                    y={showDetail ? b.y - 1 : b.y + 3}
+                    textAnchor="middle"
+                    fill={t.text}
+                    fontSize={Math.min(Math.max(b.r / 2.8, 9), 15)}
+                    fontWeight={700}
+                  >
+                    {b.m.ticker}
+                  </text>
+                  {showDetail && (
+                    <text
+                      x={b.x}
+                      y={b.y + Math.min(b.r / 2.2, 14)}
+                      textAnchor="middle"
+                      fill={t.text}
+                      fontSize={Math.min(b.r / 3.4, 11)}
+                      fontFamily="ui-monospace, monospace"
+                      opacity={0.85}
+                    >
+                      {/* A market with no trades has no change to report, so it
+                          shows its price rather than a 0.00% that looks like a
+                          measurement. */}
+                      {b.m.txns
+                        ? `${b.change >= 0 ? "+" : ""}${b.change.toFixed(2)}%`
+                        : usd(b.m.price)}
+                    </text>
                   )}
                   <title>
                     {`${b.m.ticker} · ${usd(b.m.price)} · ${b.change >= 0 ? "+" : ""}${b.change.toFixed(2)}% · liquidity ${usd(b.m.tvl, 0)} · ${num(b.m.txns)} trades`}
