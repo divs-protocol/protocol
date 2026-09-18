@@ -43,7 +43,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const hasInjected = useHasInjectedProvider();
 
-  const usable = connectors.filter((c) => c.type !== "injected" || hasInjected);
+  /*
+   * wagmi discovers installed wallets over EIP-6963 and adds each by name,
+   * while the configured `injected()` connector stays in the list as a generic
+   * "Injected" row. Both open the same extension, so the picker offered
+   * MetaMask twice - once anonymously. The named entry wins.
+   */
+  const usable = connectors.filter((c) => {
+    if (c.type !== "injected") return true;
+    if (!hasInjected) return false;
+    const discovered = connectors.some((other) => other.type === "injected" && other.id !== "injected");
+    return c.id !== "injected" || !discovered;
+  });
 
   const start = () => {
     reset();
