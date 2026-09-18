@@ -112,12 +112,75 @@ Chain 31337 is offered in development builds only. Override its endpoint with
 
 ## Deployment
 
+Two contracts are deployed: `DivsStaking` and `DivsRouter`. $DIVS itself comes
+from Pons, the stock tokens are Robinhood's and the pools are Uniswap's, so none
+of those are deployed or owned here.
+
+### 1. Configure the key
+
+The deploy key lives in Hardhat's keystore, never in a file or shell history.
+
 ```bash
-cd contracts && npx hardhat ignition deploy ignition/modules/DivsProtocol.ts --network robinhood \
-  --parameters '{"DivsProtocol":{"divs":"<pons token>","weth":"0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73","owner":"<owner>"}}'
+cd contracts && npx hardhat keystore set ROBINHOOD_PRIVATE_KEY
 ```
+
+```bash
+cd contracts && npx hardhat keystore set ROBINHOOD_RPC_URL
+```
+
+### 2. Deploy
+
+```bash
+cd contracts && npx hardhat ignition deploy ignition/modules/DivsProtocol.ts --network robinhood --parameters params.json
+```
+
+`params.json`:
+
+```json
+{
+  "DivsProtocol": {
+    "divs": "<the Pons token>",
+    "weth": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+    "usdg": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+    "usdgWethPool": "0x69BfaF19C9f377BB306a89aEd9F6B07e2c1a8d9a",
+    "owner": "<multisig>",
+    "feeBps": 10
+  }
+}
+```
+
+`owner` should be a multisig, not the deploy key. It can change the fee within
+the 1% cap, the pool multipliers and the tier table. It cannot withdraw user
+funds, mint, or seize a stake, but a single key is still a single point of
+failure.
+
+### 3. Verify the source
+
+So the explorer shows readable Solidity at the address and anyone can confirm
+the bytecode matches this repository.
+
+```bash
+cd contracts && npx hardhat verify --network robinhood <staking address> <divs> <weth> <owner>
+```
+
+```bash
+cd contracts && npx hardhat verify --network robinhood <router address> <weth> <usdg> <usdgWethPool> <staking> 10 <owner>
+```
+
+Constructor arguments must be given in the same order the contract declares
+them, or verification fails without saying why.
+
+### 4. Point the application at them
 
 The application reads deployed addresses from the environment:
 `NEXT_PUBLIC_DIVS_TOKEN_ADDRESS`, `NEXT_PUBLIC_DIVS_STAKING_ADDRESS`,
 `NEXT_PUBLIC_DIVS_ROUTER_ADDRESS`, `NEXT_PUBLIC_DIVS_LP_ADDRESS`. Staking and
 trading stay disabled while they are unset rather than failing when used.
+
+Set them in the hosting environment and redeploy. `NEXT_PUBLIC_` values are
+compiled in at build time, so an existing deployment will not pick them up.
+
+### 5. Publish the addresses
+
+Record them in `SECURITY.md` and on the site. When a clone appears, and one
+will, that record is what people check against.
