@@ -4,9 +4,11 @@ import {
   ETH_USD_POOL,
   MARKETS,
   WETH,
+  USDG,
   ethUsdFromSqrt,
   poolAbi,
-  wethPerShare,
+  usdPerShare,
+  quoteToUsd,
   type Market,
 } from "./exchange";
 
@@ -83,9 +85,16 @@ export async function readPoolStates() {
     contracts: [
       ...MARKETS.map((m) => ({ address: m.pool, abi: poolAbi, functionName: "slot0" }) as const),
       ...MARKETS.map((m) => ({ address: m.pool, abi: poolAbi, functionName: "liquidity" }) as const),
+      // The quote side differs per market, so this reads whichever asset the
+      // pool is actually paired against rather than always WETH.
       ...MARKETS.map(
         (m) =>
-          ({ address: WETH, abi: erc20BalanceOf, functionName: "balanceOf", args: [m.pool] }) as const,
+          ({
+            address: m.quote === "USDG" ? USDG : WETH,
+            abi: erc20BalanceOf,
+            functionName: "balanceOf",
+            args: [m.pool],
+          }) as const,
       ),
       ...MARKETS.map(
         (m) =>
@@ -104,7 +113,7 @@ export async function readPoolStates() {
   const n = MARKETS.length;
   const states = new Map<
     string,
-    { sqrtPriceX96: bigint; liquidity: bigint; weth: bigint; token: bigint }
+    { sqrtPriceX96: bigint; liquidity: bigint; quote: bigint; token: bigint }
   >();
 
   MARKETS.forEach((m, i) => {
@@ -113,7 +122,7 @@ export async function readPoolStates() {
     states.set(m.ticker, {
       sqrtPriceX96: slot0[0],
       liquidity: (results[n + i]?.result as bigint) ?? 0n,
-      weth: (results[2 * n + i]?.result as bigint) ?? 0n,
+      quote: (results[2 * n + i]?.result as bigint) ?? 0n,
       token: (results[3 * n + i]?.result as bigint) ?? 0n,
     });
   });
@@ -138,20 +147,24 @@ export async function readEthUsd(): Promise<number> {
  * The WETH leg is the trade's value and its sign is the direction: positive
  * means WETH went into the pool, so the trader bought shares.
  */
-export function summarise(m: Market, logs: SwapLog[], points = 24) {
+export function summarise(m: Market, logs: SwapLog[], ethUsd: number, points = 24) {
   const sorted = logs
     .slice()
     .sort((a, b) => (a.blockNumber === b.blockNumber ? 0 : a.blockNumber < b.blockNumber ? -1 : 1));
 
   let buys = 0;
-  let wethVolume = 0;
+  let usdVolume = 0;
   const prices: number[] = [];
 
   for (const log of sorted) {
-    const wethDelta = (m.wethIsToken0 ? log.args.amount0 : log.args.amount1) ?? 0n;
-    wethVolume += Math.abs(Number(wethDelta)) / 1e18;
-    if (wethDelta > 0n) buys += 1;
-    prices.push(wethPerShare(m, log.args.sqrtPriceX96 ?? 0n));
+    // The quote side is whichever token the market is priced against, and its
+    // decimals differ between the two - so the conversion has to go through the
+    // market rather than assume 1e18.
+    const quoteDelta = (m.quoteIsToken0 ? log.args.amount0 : log.args.amount1) ?? 0n;
+    usdVolume += quoteToUsd(m, quoteDelta, ethUsd);
+    // Quote flowing into the pool is someone buying the share.
+    if (quoteDelta > 0n) buys += 1;
+    prices.push(usdPerShare(m, log.args.sqrtPriceX96 ?? 0n, ethUsd));
   }
 
   // A row's sparkline needs a couple of dozen points, not thousands.
@@ -168,8 +181,9 @@ export function summarise(m: Market, logs: SwapLog[], points = 24) {
 
   return {
     change: open ? ((close - open) / open) * 100 : 0,
-    wethVolume,
-    wethFees: (wethVolume * m.feeBps) / 1_000_000,
+    usdVolume,
+    // feeBps is in hundredths of a basis point, as Uniswap stores it.
+    usdFees: (usdVolume * m.feeBps) / 1_000_000,
     txns: sorted.length,
     buys,
     sells: sorted.length - buys,

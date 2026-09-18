@@ -5,7 +5,7 @@ import { formatUnits, parseAbiItem } from "viem";
 import { useAccount, useBalance, useDisconnect, usePublicClient, useReadContracts } from "wagmi";
 import { robinhood } from "wagmi/chains";
 import { Copy, Check, ExternalLink, LogOut, Loader2 } from "lucide-react";
-import { MARKETS, ETH_USD_POOL, poolAbi, wethPerShare, ethUsdFromSqrt } from "@/lib/exchange";
+import { MARKETS, ETH_USD_POOL, poolAbi, usdPerShare, ethUsdFromSqrt } from "@/lib/exchange";
 import { STOCK_TOKENS, stockTokenAbi, toDisplayShares } from "@/lib/stockTokens";
 import { STAKING_ADDRESS, stakingAbi, DIVS_POOL, LP_POOL } from "@/lib/divsStaking";
 import ConnectPrompt from "./ConnectPrompt";
@@ -78,7 +78,7 @@ function usePriceMap() {
   const prices: Record<string, number> = {};
   MARKETS.forEach((m, i) => {
     const slot0 = data?.[i]?.result as readonly unknown[] | undefined;
-    if (slot0) prices[m.ticker] = wethPerShare(m, slot0[0] as bigint) * ethUsd;
+    if (slot0) prices[m.ticker] = usdPerShare(m, slot0[0] as bigint, ethUsd);
   });
 
   return { prices, ethUsd };
@@ -222,15 +222,15 @@ export function ActivityView() {
           const m = MARKETS.find((x) => x.pool.toLowerCase() === l.address.toLowerCase())!;
           const a0 = l.args.amount0 as bigint;
           const a1 = l.args.amount1 as bigint;
-          const wethAmt = m.wethIsToken0 ? a0 : a1;
-          const shareAmt = m.wethIsToken0 ? a1 : a0;
+          const quoteAmt = m.quoteIsToken0 ? a0 : a1;
+          const shareAmt = m.quoteIsToken0 ? a1 : a0;
           const abs = (v: bigint) => (v < 0n ? -v : v);
           return {
             key: `${l.blockNumber}-${l.logIndex}-${i}`,
             ticker: m.ticker,
-            side: wethAmt < 0n ? "sell" : "buy",
+            side: quoteAmt < 0n ? "sell" : "buy",
             shares: Number(formatUnits(abs(shareAmt), 18)),
-            weth: Number(formatUnits(abs(wethAmt), 18)),
+            weth: Number(formatUnits(abs(quoteAmt), 18)),
             block: Number(l.blockNumber),
           };
         });

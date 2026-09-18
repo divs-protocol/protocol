@@ -1,4 +1,4 @@
-import { MARKETS, wethPerShare } from "./exchange";
+import { MARKETS, usdPerShare, quoteToUsd } from "./exchange";
 import { byPool, client, getSwapLogs, readPoolStates, spanLabel, summarise } from "./chain";
 
 /**
@@ -10,7 +10,13 @@ import { byPool, client, getSwapLogs, readPoolStates, spanLabel, summarise } fro
  */
 
 /** All 17 pools at once; sized so the query stays under the 10,000-log cap. */
-const INDEX_BLOCKS = 20_000n;
+/**
+ * Ninety-eight pools is roughly three times the pool count this window was
+ * tuned for, and a cold response was running to nearly nine seconds - close
+ * enough to a serverless timeout to fail in production rather than degrade.
+ * A shorter window costs some of the reported span, not any market.
+ */
+const INDEX_BLOCKS = 9_000n;
 export const TTL_MS = 15_000;
 
 export type MarketRow = {
@@ -20,7 +26,8 @@ export type MarketRow = {
   token: string;
   pool: string;
   feeBps: number;
-  wethIsToken0: boolean;
+  quote: "WETH" | "USDG";
+  quoteIsToken0: boolean;
   price: number;
   change: number;
   volume: number;
@@ -58,10 +65,10 @@ export async function loadMarketsSnapshot(): Promise<MarketsSnapshot> {
 
   const markets: MarketRow[] = MARKETS.map((m) => {
     const state = states.get(m.ticker);
-    const flow = summarise(m, grouped.get(m.pool.toLowerCase()) ?? []);
-    const price = state ? wethPerShare(m, state.sqrtPriceX96) * ethUsd : 0;
+    const flow = summarise(m, grouped.get(m.pool.toLowerCase()) ?? [], ethUsd);
+    const price = state ? usdPerShare(m, state.sqrtPriceX96, ethUsd) : 0;
     const tvl = state
-      ? (Number(state.weth) / 1e18) * ethUsd + (Number(state.token) / 1e18) * price
+      ? quoteToUsd(m, state.quote, ethUsd) + (Number(state.token) / 1e18) * price
       : 0;
 
     return {
@@ -71,11 +78,12 @@ export async function loadMarketsSnapshot(): Promise<MarketsSnapshot> {
       token: m.token,
       pool: m.pool,
       feeBps: m.feeBps,
-      wethIsToken0: m.wethIsToken0,
+      quote: m.quote,
+      quoteIsToken0: m.quoteIsToken0,
       price,
       change: flow.change,
-      volume: flow.wethVolume * ethUsd,
-      fees: flow.wethFees * ethUsd,
+      volume: flow.usdVolume,
+      fees: flow.usdFees,
       tvl,
       txns: flow.txns,
       buys: flow.buys,

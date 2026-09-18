@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { findMarket, wethPerShare } from "@/lib/exchange";
+import { findMarket, usdPerShare, quoteToUsd } from "@/lib/exchange";
 import { cached, client, getSwapLogs, readEthUsd, spanLabel, type SwapLog } from "@/lib/chain";
 
 /**
@@ -84,11 +84,11 @@ async function load(ticker: string, span: string): Promise<MarketDetail> {
   const closes = new Map<number, { t: number; price: number }>();
 
   for (const log of sorted) {
-    const wethDelta = log.args.amount0 === undefined ? 0n : m.wethIsToken0 ? log.args.amount0 : log.args.amount1!;
-    const shareDelta = m.wethIsToken0 ? log.args.amount1! : log.args.amount0!;
-    const price = wethPerShare(m, log.args.sqrtPriceX96 ?? 0n) * ethUsd;
-    const value = (Math.abs(Number(wethDelta)) / 1e18) * ethUsd;
-    const isBuy = wethDelta > 0n;
+    const quoteDelta = log.args.amount0 === undefined ? 0n : m.quoteIsToken0 ? log.args.amount0 : log.args.amount1!;
+    const shareDelta = m.quoteIsToken0 ? log.args.amount1! : log.args.amount0!;
+    const price = usdPerShare(m, log.args.sqrtPriceX96 ?? 0n, ethUsd);
+    const value = quoteToUsd(m, quoteDelta, ethUsd);
+    const isBuy = quoteDelta > 0n;
 
     if (isBuy) {
       buys += 1;

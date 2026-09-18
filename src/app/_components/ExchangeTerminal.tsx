@@ -6,7 +6,7 @@ import { useAccount, usePublicClient, useReadContracts } from "wagmi";
 import { robinhood } from "wagmi/chains";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, ReferenceLine } from "recharts";
 import { ArrowDownUp, ArrowLeft, Search, Loader2 } from "lucide-react";
-import { MARKETS, type Market, ETH_USD_POOL, poolAbi, wethPerShare, ethUsdFromSqrt } from "@/lib/exchange";
+import { MARKETS, type Market, ETH_USD_POOL, poolAbi, usdPerShare, wethPerShare, quoteDecimals, quoteToUsd, ethUsdFromSqrt } from "@/lib/exchange";
 import { stockTokenAbi, toDisplayShares } from "@/lib/stockTokens";
 import {
   DEFAULT_FEE_BPS,
@@ -39,7 +39,8 @@ type Trade = {
   side: "buy" | "sell";
   price: number;
   shares: number;
-  weth: number;
+  quote: number;
+  value: number;
   block: number;
   secondsAgo: number;
 };
@@ -77,8 +78,10 @@ function usePrices() {
   const priced = MARKETS.map((m, i) => {
     const slot0 = data?.[i * 2]?.result as readonly unknown[] | undefined;
     const liquidity = data?.[i * 2 + 1]?.result as bigint | undefined;
-    const weth = slot0 ? wethPerShare(m, slot0[0] as bigint) : 0;
-    return { market: m, weth, usd: weth * ethUsd, liquidity };
+    const usd = slot0 ? usdPerShare(m, slot0[0] as bigint, ethUsd) : 0;
+    // wethPerShare returns 0 for a USDG market, which is what disables trading on it.
+    const weth = wethPerShare(m, (slot0?.[0] as bigint) ?? 0n);
+    return { market: m, weth, usd, liquidity };
   });
 
   return { priced, ethUsd, isLoading };
@@ -114,19 +117,20 @@ function useSwaps(market: Market, ethUsd: number) {
 
         const out: Trade[] = logs.map((l, i) => {
           const a = l.args;
-          const price = wethPerShare(market, a.sqrtPriceX96 as bigint) * ethUsd;
+          const price = usdPerShare(market, a.sqrtPriceX96 as bigint, ethUsd);
           const amt0 = a.amount0 as bigint;
           const amt1 = a.amount1 as bigint;
-          const wethAmt = market.wethIsToken0 ? amt0 : amt1;
-          const shareAmt = market.wethIsToken0 ? amt1 : amt0;
+          const quoteAmt = market.quoteIsToken0 ? amt0 : amt1;
+          const shareAmt = market.quoteIsToken0 ? amt1 : amt0;
           const abs = (v: bigint) => (v < 0n ? -v : v);
           return {
             key: `${l.blockNumber}-${l.logIndex}-${i}`,
-            // WETH leaving the pool means shares were sold into it.
-            side: wethAmt < 0n ? "sell" : "buy",
+            // Quote leaving the pool means shares were sold into it.
+            side: quoteAmt < 0n ? "sell" : "buy",
             price,
             shares: Number(formatUnits(abs(shareAmt), 18)),
-            weth: Number(formatUnits(abs(wethAmt), 18)),
+            quote: Number(formatUnits(abs(quoteAmt), quoteDecimals(market))),
+            value: quoteToUsd(market, quoteAmt, ethUsd),
             block: Number(l.blockNumber),
             secondsAgo: Number(head - l.blockNumber) * perBlock,
           };
@@ -190,7 +194,7 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
 
   const stats = useMemo(() => {
     const day = trades;
-    const vol = day.reduce((s, t) => s + t.weth * ethUsd, 0);
+    const vol = day.reduce((s, t) => s + t.value, 0);
     const first = day[0];
     const change = first && active.usd ? ((active.usd - first.price) / first.price) * 100 : 0;
     const prices = day.map((t) => t.price).filter((p) => p > 0);
@@ -202,7 +206,7 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
       count: day.length,
       windowed: day.length > 0,
     };
-  }, [trades, ethUsd, active.usd]);
+  }, [trades, active.usd]);
 
   const series = useMemo(
     () => trades.slice(-160).map((t) => ({ t: ago(t.secondsAgo), price: t.price })),
@@ -555,7 +559,7 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
                     </td>
                     <td className="px-3 py-1.5 text-right font-mono text-gray-200">{t.price ? usd(t.price) : "-"}</td>
                     <td className="px-3 py-1.5 text-right font-mono text-gray-300">{num(t.shares, 4)}</td>
-                    <td className="px-3 py-1.5 text-right font-mono text-gray-400">{num(t.weth, 5)}</td>
+                    <td className="px-3 py-1.5 text-right font-mono text-gray-400">{num(t.quote, 5)}</td>
                     <td className="px-3 py-1.5 text-right font-mono text-gray-600">{t.block}</td>
                     <td className="px-3 py-1.5 text-right font-mono text-gray-600">{ago(t.secondsAgo)}</td>
                   </tr>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MARKETS, wethPerShare, type Market } from "./exchange";
+import { MARKETS, quoteDecimals, usdPerShare, type Market } from "./exchange";
 
 /**
  * Live market data, read from the pools on Robinhood Chain.
@@ -283,7 +283,7 @@ export function poolDepth(
   ethUsd: number,
   levels = 11,
 ): Book {
-  const spot = wethPerShare(m, sqrtPriceX96) * ethUsd;
+  const spot = usdPerShare(m, sqrtPriceX96, ethUsd);
   if (!sqrtPriceX96 || !liquidity || !spot) return EMPTY_BOOK;
 
   const L = Number(liquidity);
@@ -301,16 +301,19 @@ export function poolDepth(
       const price = spot * move;
 
       // slot0 prices token1 in token0, so a rise in the share price is a fall
-      // in the pool price when WETH is token0.
-      const ratio = m.wethIsToken0 ? 1 / move : move;
+      // in the pool price when the quote asset is token0.
+      const ratio = m.quoteIsToken0 ? 1 / move : move;
       const sqrtTarget = sqrtP * Math.sqrt(ratio);
       const lo = Math.min(sqrtP, sqrtTarget);
       const hi = Math.max(sqrtP, sqrtTarget);
       if (!lo || !hi || !Number.isFinite(lo) || !Number.isFinite(hi)) continue;
 
-      const dWeth = (L * (hi - lo)) / 1e18;
-      const dShares = (L * (1 / lo - 1 / hi)) / 1e18;
-      const shares = m.wethIsToken0 ? dShares : dWeth;
+      // Liquidity is expressed in the geometric mean of both sides, so the
+      // quote leg carries that asset's decimals while the share leg is always 18.
+      const quoteScale = 10 ** ((quoteDecimals(m) + 18) / 2);
+      const dQuote = (L * (hi - lo)) / quoteScale;
+      const dShares = (L * (1 / lo - 1 / hi)) / quoteScale;
+      const shares = m.quoteIsToken0 ? dShares : dQuote;
       if (!Number.isFinite(shares) || shares <= 0) continue;
 
       const size = shares - cum;

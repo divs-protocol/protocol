@@ -26,7 +26,11 @@ const WETH = "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73";
 const USDG = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168";
 const FEES = [100, 500, 3000, 10000];
 
-/** Anything quoted in USDG needs router work before it can be traded here. */
+/**
+ * WETH first: where a token has both, the WETH pool is the one the router can
+ * charge a fee on. A USDG market is listed and priced, but not yet tradeable
+ * through DivsRouter.
+ */
 const QUOTES = { WETH, USDG };
 
 const factoryAbi = [
@@ -96,6 +100,8 @@ async function deepestPool(token, quote) {
 const tokens = JSON.parse(fs.readFileSync(path.join(DIR, "tokens.json"), "utf8"));
 const tradeable = [];
 const quotedInUsdg = [];
+/** USDG-quoted markets: listed and priced, not yet tradeable through the router. */
+const listed = [];
 const noLiquidity = [];
 const notStockTokens = [];
 
@@ -111,18 +117,24 @@ for (const t of tokens) {
 
   const weth = await deepestPool(token, QUOTES.WETH);
   if (weth) {
-    tradeable.push({ ...t, token, pool: weth.pool, feeBps: weth.feeBps, wethIsToken0: weth.quoteIsToken0, liquidity: weth.liquidity });
+    tradeable.push({ ...t, token, quote: "WETH", pool: weth.pool, feeBps: weth.feeBps, quoteIsToken0: weth.quoteIsToken0, liquidity: weth.liquidity });
     continue;
   }
 
   const usdg = await deepestPool(token, QUOTES.USDG);
-  if (usdg) quotedInUsdg.push(t.ticker);
-  else noLiquidity.push(t.ticker);
+  if (usdg) {
+    quotedInUsdg.push(t.ticker);
+    listed.push({ ...t, token, quote: "USDG", pool: usdg.pool, feeBps: usdg.feeBps, quoteIsToken0: usdg.quoteIsToken0, liquidity: usdg.liquidity });
+  } else {
+    noLiquidity.push(t.ticker);
+  }
 
   await sleep(60);
 }
 
 tradeable.sort((a, b) => (b.liquidity > a.liquidity ? 1 : -1));
+listed.sort((a, b) => (b.liquidity > a.liquidity ? 1 : -1));
+const all = [...tradeable, ...listed];
 
 console.log(`\ntradeable against WETH : ${tradeable.length}`);
 console.log(`quoted in USDG only    : ${quotedInUsdg.length}  ${quotedInUsdg.join(" ")}`);
@@ -136,8 +148,11 @@ if (!process.argv.includes("--write")) {
   process.exit(0);
 }
 
-const rows = tradeable
-  .map((m) => `  { ticker: "${m.ticker}", name: "${m.name}", kind: "${m.kind}", token: "${m.token}", pool: "${m.pool}", feeBps: ${m.feeBps}, wethIsToken0: ${m.wethIsToken0} },`)
+const rows = all
+  .map(
+    (m) =>
+      `  { ticker: "${m.ticker}", name: "${m.name}", kind: "${m.kind}", token: "${m.token}", pool: "${m.pool}", feeBps: ${m.feeBps}, quote: "${m.quote}", quoteIsToken0: ${m.quoteIsToken0} },`,
+  )
   .join("\n");
 
 const file = path.join(DIR, "..", "src", "lib", "exchange.ts");

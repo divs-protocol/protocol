@@ -94,6 +94,9 @@ export const DEFAULT_FEE_BPS = 10;
 
 export const SLIPPAGE_OPTIONS = [0.1, 0.5, 1] as const;
 
+/** A USDG-quoted market cannot be traded through the router; the fee would arrive in USDG. */
+export const isTradeable = (m: Market) => m.quote === "WETH";
+
 /**
  * Shares received for an amount of WETH, after the protocol fee.
  *
