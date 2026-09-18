@@ -91,6 +91,25 @@ pnpm build && pnpm lint && pnpm typecheck
 cd contracts && npm install && npx hardhat test
 ```
 
+### Generated data
+
+Two files are written by scripts rather than by hand, and neither should be
+edited directly.
+
+`src/lib/exchange.ts` holds the market registry, rebuilt from the chain:
+
+```bash
+node scripts/scan-markets.mjs --write
+```
+
+`src/lib/ciks.ts` maps each listed stock to its SEC filer number, which is what
+the insider panels look up. It reads the tickers back out of the registry, so
+run it after a scan adds markets:
+
+```bash
+node scripts/fetch-ciks.mjs --write
+```
+
 ### Against a local chain
 
 Two terminals:

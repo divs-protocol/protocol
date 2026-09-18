@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { compact, num, usd, useProtocolStats, useStaking } from "@/lib/live";
 import Footer from "./Footer";
+import { InsiderFeedPanel } from "./InsiderPanel";
 import MarketHeatmap from "./MarketHeatmap";
 import SectorPanels from "./SectorPanels";
 
@@ -247,6 +248,9 @@ export default function AnalyticsSection() {
           </div>
         </Panel>
       </div>
+
+      {/* the only panel here that reads the companies rather than their pools */}
+      <InsiderFeedPanel />
 
       {/* staking, once there is a contract to read */}
       <Panel

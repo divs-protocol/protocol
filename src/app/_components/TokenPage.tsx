@@ -15,6 +15,7 @@ import {
   useMarketHistory,
 } from "@/lib/live";
 import Footer from "./Footer";
+import { TickerInsiderPanel } from "./InsiderPanel";
 
 /**
  * One market in depth: chart, order flow and the tape.
@@ -416,6 +417,9 @@ export default function TokenPage({
           </table>
         </div>
       </div>
+
+      {/* what the people who run the company are doing with their own shares */}
+      <TickerInsiderPanel ticker={market.ticker} />
 
       <Footer />
     </div>

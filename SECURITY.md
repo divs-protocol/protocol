@@ -224,6 +224,12 @@ browsers reject. **That proxy forwards a read-only method allowlist and refuses
 `eth_sendRawTransaction`**, so it is not in the signing path. Transactions are
 signed and broadcast by the user's wallet over its own connection.
 
+One external source is read besides the chain. The insider-dealings panels fetch
+SEC Form 4 filings from `sec.gov` and `data.sec.gov`, server side, through
+`/api/insider`. Those requests carry no user data, are cached for an hour, and
+their responses are parsed into a fixed row shape rather than rendered as
+markup. A failure there empties a panel and changes nothing else.
+
 ---
 
 ## Reporting a vulnerability

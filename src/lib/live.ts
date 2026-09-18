@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { InsiderFeed, TickerInsiders } from "./insider";
 import { MARKETS, quoteDecimals, usdPerShare, type Market } from "./exchange";
 
 /**
@@ -458,4 +459,79 @@ export function useNow(intervalMs = 30_000) {
     return () => clearInterval(id);
   }, [intervalMs]);
   return now;
+}
+
+/**
+ * Insider and director dealings across every listed stock.
+ *
+ * Form 4 is due within two business days of a trade, so this moves a handful of
+ * times a day at most. It is fetched once rather than polled; the route caches
+ * for an hour behind it, and a poll would only ask the same question again.
+ */
+export function useInsiderFeed() {
+  const [feed, setFeed] = useState<InsiderFeed | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const response = await fetch("/api/insider");
+        const body = await response.json();
+        if (cancelled) return;
+        if (!response.ok) throw new Error(body?.error ?? "Failed to read EDGAR");
+        setFeed(body as InsiderFeed);
+        setError(null);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to read EDGAR");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { feed, loading, error };
+}
+
+/**
+ * One company's dealings, for its market page.
+ *
+ * The route answers for a ticker it has no filer for rather than failing, so
+ * there is no unknown-ticker branch to handle here.
+ */
+export function useTickerInsiders(ticker: string) {
+  const [data, setData] = useState<TickerInsiders | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const response = await fetch(`/api/insider/${ticker}`);
+        const body = await response.json();
+        if (cancelled) return;
+        if (!response.ok) throw new Error(body?.error ?? "Failed to read EDGAR");
+        setData(body as TickerInsiders);
+        setError(null);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to read EDGAR");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ticker]);
+
+  return { data, loading, error };
 }
