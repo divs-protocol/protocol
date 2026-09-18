@@ -17,9 +17,13 @@ contract DivsRouterTest is Test {
     DivsRouter router;
     DivsStaking staking;
     MockWETH weth;
+    MockERC20 usdg;
     MockERC20 divs;
     MockERC20 aapl;
+    MockERC20 amzn;
     MockV3Pool pool;
+    MockV3Pool usdgPool;
+    MockV3Pool usdgWethPool;
 
     address owner = address(0xA11CE);
     address alice = address(0xA1);
@@ -27,11 +31,18 @@ contract DivsRouterTest is Test {
     uint256 constant FEE_BPS = 10; // 0.10%
     /// @dev 1 AAPL = 0.1 WETH, so 1 WETH buys 10 AAPL.
     uint256 constant RATE = 10e18;
+    /// @dev 1 AMZN = 250 USDG. USDG carries six decimals, not eighteen.
+    uint256 constant USDG_RATE = 250e6;
+    /// @dev 1 WETH = 2500 USDG, the reference used to convert fees.
+    uint256 constant ETH_USDG = 2500e6;
 
     function setUp() public {
         weth = new MockWETH();
+        usdg = new MockERC20("Global Dollar", "USDG");
+        usdg.setDecimals(6);
         divs = new MockERC20("DIVS", "DIVS");
         aapl = new MockERC20("Apple", "AAPL");
+        amzn = new MockERC20("Amazon", "AMZN");
 
         staking = new DivsStaking(address(divs), address(weth), owner);
         vm.prank(owner);
@@ -48,7 +59,27 @@ contract DivsRouterTest is Test {
         // by a seller unwrapping to ETH has nothing to pay out.
         vm.deal(address(weth), 1_000_000 ether);
 
-        router = new DivsRouter(address(weth), address(staking), FEE_BPS, owner);
+        // A USDG-quoted market, and the reference pool that converts its fees.
+        usdgPool = address(usdg) < address(amzn)
+            ? new MockV3Pool(address(usdg), address(amzn), (10 ** 36) / USDG_RATE)
+            : new MockV3Pool(address(amzn), address(usdg), USDG_RATE);
+        usdgWethPool = address(usdg) < address(weth)
+            ? new MockV3Pool(address(usdg), address(weth), (10 ** 36) / ETH_USDG)
+            : new MockV3Pool(address(weth), address(usdg), ETH_USDG);
+
+        amzn.mint(address(usdgPool), 1_000_000 ether);
+        usdg.mint(address(usdgPool), 1_000_000_000e6);
+        usdg.mint(address(usdgWethPool), 1_000_000_000e6);
+        weth.mint(address(usdgWethPool), 1_000_000 ether);
+
+        router = new DivsRouter(
+            address(weth),
+            address(usdg),
+            address(usdgWethPool),
+            address(staking),
+            FEE_BPS,
+            owner
+        );
 
         // Someone has to be staked or notifyFee parks the fee in unallocatedFees.
         divs.mint(alice, 1_000 ether);
@@ -216,6 +247,126 @@ contract DivsRouterTest is Test {
         vm.prank(alice);
         (bool ok,) = address(router).call{value: 1 ether}("");
         assertFalse(ok, "only the WETH contract may pay in");
+    }
+
+    // --- USDG-quoted markets -----------------------------------------------
+
+    function test_BuyWithUsdgChargesFeeInUsdg() public {
+        uint256 spend = 1_000e6; // 1,000 USDG
+        usdg.mint(alice, spend);
+        vm.startPrank(alice);
+        usdg.approve(address(router), type(uint256).max);
+        uint256 out = router.buy(address(usdgPool), spend, 0, alice);
+        vm.stopPrank();
+
+        uint256 fee = (spend * FEE_BPS) / 10_000;
+        // 1 AMZN costs 250 USDG, and only the net amount reaches the pool.
+        assertEq(out, ((spend - fee) * 1e18) / USDG_RATE, "priced on the net amount");
+        assertEq(amzn.balanceOf(alice), out, "shares delivered");
+        assertEq(router.pendingUsdgFees(), fee, "fee held in USDG, not WETH");
+        assertEq(router.pendingFees(), 0, "no WETH taken from a USDG market");
+    }
+
+    function test_SellForUsdgPaysOutUsdg() public {
+        uint256 size = 4 ether; // 4 AMZN
+        amzn.mint(alice, size);
+        vm.startPrank(alice);
+        amzn.approve(address(router), type(uint256).max);
+        uint256 out = router.sell(address(usdgPool), size, 0, alice, false);
+        vm.stopPrank();
+
+        uint256 gross = (size * USDG_RATE) / 1e18;
+        uint256 fee = (gross * FEE_BPS) / 10_000;
+        assertEq(out, gross - fee, "proceeds net of the fee");
+        assertEq(usdg.balanceOf(alice), out, "paid in USDG");
+    }
+
+    function test_UsdgFeesConvertToWethBeforeReachingStaking() public {
+        // The USDG threshold is 100 USDG; at 10 bps that needs 100,000 of volume.
+        uint256 spend = 120_000e6;
+        usdg.mint(alice, spend);
+        vm.startPrank(alice);
+        usdg.approve(address(router), type(uint256).max);
+        router.buy(address(usdgPool), spend, 0, alice);
+        vm.stopPrank();
+
+        uint256 fee = (spend * FEE_BPS) / 10_000;
+        assertEq(router.pendingUsdgFees(), 0, "converted");
+        assertEq(usdg.balanceOf(address(staking)), 0, "the vault never sees USDG");
+
+        // 2,500 USDG to the WETH, so the fee arrives as its equivalent.
+        assertEq(
+            weth.balanceOf(address(staking)),
+            (fee * 1e18) / ETH_USDG,
+            "staking holds the converted fee"
+        );
+
+        (uint256 pendingWeth,) = staking.pendingRewards(alice);
+        assertGt(pendingWeth, 0, "the staker can claim it");
+    }
+
+    function test_SmallUsdgFeesWaitForTheThreshold() public {
+        usdg.mint(alice, 1_000e6);
+        vm.startPrank(alice);
+        usdg.approve(address(router), type(uint256).max);
+        router.buy(address(usdgPool), 1_000e6, 0, alice);
+        vm.stopPrank();
+
+        assertEq(router.pendingUsdgFees(), (1_000e6 * FEE_BPS) / 10_000, "held");
+        assertEq(weth.balanceOf(address(staking)), 0, "not yet notified");
+
+        // Permissionless, and it converts on the way through.
+        vm.prank(address(0xDEAD));
+        router.flushFees();
+        assertEq(router.pendingUsdgFees(), 0, "converted on demand");
+        assertGt(weth.balanceOf(address(staking)), 0, "delivered as WETH");
+    }
+
+    function test_BothQuoteAssetsFlushTogether() public {
+        _fundAlice(60 ether);
+        usdg.mint(alice, 1_000e6);
+
+        vm.startPrank(alice);
+        usdg.approve(address(router), type(uint256).max);
+        router.buy(address(usdgPool), 1_000e6, 0, alice);
+        // Crossing the WETH threshold flushes the USDG sitting alongside it.
+        router.buy(address(pool), 60 ether, 0, alice);
+        vm.stopPrank();
+
+        assertEq(router.pendingFees(), 0, "WETH flushed");
+        assertEq(router.pendingUsdgFees(), 0, "USDG flushed with it");
+
+        uint256 wethFee = (60 ether * FEE_BPS) / 10_000;
+        uint256 usdgFee = (1_000e6 * FEE_BPS) / 10_000;
+        assertEq(
+            weth.balanceOf(address(staking)),
+            wethFee + (usdgFee * 1e18) / ETH_USDG,
+            "both arrive as WETH"
+        );
+    }
+
+    function test_EthPathRefusesAUsdgMarket() public {
+        vm.deal(alice, 1 ether);
+        vm.prank(alice);
+        vm.expectRevert("Not WETH quoted");
+        router.buyWithETH{value: 1 ether}(address(usdgPool), 0, alice);
+    }
+
+    function test_UnwrapRefusesAUsdgMarket() public {
+        amzn.mint(alice, 1 ether);
+        vm.startPrank(alice);
+        amzn.approve(address(router), type(uint256).max);
+        vm.expectRevert("Not WETH quoted");
+        router.sell(address(usdgPool), 1 ether, 0, alice, true);
+        vm.stopPrank();
+    }
+
+    function test_RejectsAPairWithNeitherQuoteAsset() public {
+        MockERC20 other = new MockERC20("Other", "OTHER");
+        MockV3Pool orphan = new MockV3Pool(address(aapl), address(other), 1e18);
+        vm.prank(alice);
+        vm.expectRevert("Unsupported pair");
+        router.buy(address(orphan), 1 ether, 0, alice);
     }
 
     // --- invariants --------------------------------------------------------

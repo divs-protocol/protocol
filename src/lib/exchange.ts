@@ -179,6 +179,22 @@ export function usdPerShare(m: Market, sqrtPriceX96: bigint, ethUsd: number): nu
 }
 
 /**
+ * Quote asset per share, in that asset's own units.
+ *
+ * This is what a trade is actually denominated in: WETH for most markets, USDG
+ * for around sixty of them. USD conversion belongs to display, not to sizing a
+ * transaction.
+ */
+export function quotePerShare(m: Market, sqrtPriceX96: bigint): number {
+  if (sqrtPriceX96 === 0n) return 0;
+  const qd = quoteDecimals(m);
+  const [dec0, dec1] = m.quoteIsToken0 ? [qd, 18] : [18, qd];
+  const p = priceFromSqrt(sqrtPriceX96, dec0, dec1);
+  if (p === 0) return 0;
+  return m.quoteIsToken0 ? 1 / p : p;
+}
+
+/**
  * WETH per share, for the router only.
  *
  * DivsRouter charges its fee on the WETH side, so it can only trade a

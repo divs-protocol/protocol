@@ -23,14 +23,19 @@ async function main() {
   // something to stake.
   const divs = await ethers.deployContract("MockERC20", ["DIVS", "DIVS"]);
   const weth = await ethers.deployContract("MockWETH");
+  const usdg = await ethers.deployContract("MockERC20", ["Global Dollar", "USDG"]);
   const lp = await ethers.deployContract("MockERC20", ["DIVS/WETH LP", "DIVS-LP"]);
   const aapl = await ethers.deployContract("MockERC20", ["Apple", "AAPL"]);
+  const amzn = await ethers.deployContract("MockERC20", ["Amazon", "AMZN"]);
   await Promise.all([
     divs.waitForDeployment(),
     weth.waitForDeployment(),
+    usdg.waitForDeployment(),
     lp.waitForDeployment(),
     aapl.waitForDeployment(),
+    amzn.waitForDeployment(),
   ]);
+  await (await usdg.setDecimals(6)).wait();
 
   const wethAddress = await weth.getAddress();
   const aaplAddress = await aapl.getAddress();
@@ -46,14 +51,42 @@ async function main() {
   await (await staking.addPool(await divs.getAddress(), 10_000n)).wait();
   await (await staking.addPool(await lp.getAddress(), 20_000n)).wait();
 
-  // 10 bps on the WETH side, matching the Ignition default.
+  // The reference pool the router converts USDG fees through: 1 WETH = 2,500 USDG.
+  const usdgAddress = await usdg.getAddress();
+  const ethUsdg = 2500n * 10n ** 6n;
+  const usdgIsToken0 = usdgAddress.toLowerCase() < wethAddress.toLowerCase();
+  const usdgWethPool = await ethers.deployContract("MockV3Pool", [
+    usdgAddress,
+    wethAddress,
+    usdgIsToken0 ? (10n ** 36n) / ethUsdg : ethUsdg,
+  ]);
+  await usdgWethPool.waitForDeployment();
+  await (await usdg.mint(await usdgWethPool.getAddress(), 10n ** 15n)).wait();
+  await (await weth.mint(await usdgWethPool.getAddress(), ethers.parseEther("1000000"))).wait();
+
+  // 10 bps on the quote side, matching the Ignition default.
   const router = await ethers.deployContract("DivsRouter", [
     wethAddress,
+    usdgAddress,
+    await usdgWethPool.getAddress(),
     await staking.getAddress(),
     10n,
     deployer.address,
   ]);
   await router.waitForDeployment();
+
+  // A USDG-quoted market, so the local chain exercises both fee paths.
+  const usdgRate = 250n * 10n ** 6n; // 1 AMZN = 250 USDG
+  const amznAddress = await amzn.getAddress();
+  const usdgIsToken0Here = usdgAddress.toLowerCase() < amznAddress.toLowerCase();
+  const amznPool = await ethers.deployContract("MockV3Pool", [
+    usdgAddress,
+    amznAddress,
+    usdgIsToken0Here ? (10n ** 36n) / usdgRate : usdgRate,
+  ]);
+  await amznPool.waitForDeployment();
+  await (await amzn.mint(await amznPool.getAddress(), ethers.parseEther("1000000"))).wait();
+  await (await usdg.mint(await amznPool.getAddress(), 10n ** 15n)).wait();
 
   // A market to trade against: 1 WETH buys 10 AAPL. The mock pool orders its
   // own tokens, so the rate is expressed for whichever side ends up token0.
@@ -91,6 +124,12 @@ async function main() {
   await (await weth.approve(await router.getAddress(), spend)).wait();
   await (await router.buy(poolAddress, spend, 0n, deployer.address)).wait();
 
+  // And a trade on the USDG side, whose fee is converted before it lands.
+  const usdgSpend = 120_000n * 10n ** 6n;
+  await (await usdg.mint(deployer.address, usdgSpend)).wait();
+  await (await usdg.approve(await router.getAddress(), usdgSpend)).wait();
+  await (await router.buy(await amznPool.getAddress(), usdgSpend, 0n, deployer.address)).wait();
+
   const [pendingWeth, pendingDivs] = await staking.pendingRewards(alice.address);
 
   console.log("\nDeployed to localhost (chain 31337):");
@@ -100,12 +139,21 @@ async function main() {
   console.log("  WETH        :", wethAddress);
   console.log("  LP          :", await lp.getAddress());
   console.log("  AAPL        :", aaplAddress);
-  console.log("  AAPL pool   :", poolAddress);
+  console.log("  AAPL pool   :", poolAddress, "(WETH quoted)");
+  console.log("  USDG (mock) :", usdgAddress);
+  console.log("  AMZN        :", amznAddress);
+  console.log("  AMZN pool   :", await amznPool.getAddress(), "(USDG quoted)");
 
   console.log("\nTraded 60 WETH through the router:");
   console.log("  AAPL bought   :", ethers.formatEther(await aapl.balanceOf(deployer.address)));
   console.log("  fee to staking:", ethers.formatEther(await weth.balanceOf(await staking.getAddress())));
   console.log("  held in router:", ethers.formatEther(await router.pendingFees()));
+
+  console.log("\nTraded 120,000 USDG through the router:");
+  console.log("  AMZN bought     :", ethers.formatEther(await amzn.balanceOf(deployer.address)));
+  console.log("  USDG held       :", await router.pendingUsdgFees());
+  console.log("  staking (WETH)  :", ethers.formatEther(await weth.balanceOf(await staking.getAddress())));
+  console.log("  staking (USDG)  :", await usdg.balanceOf(await staking.getAddress()), "(must be 0)");
 
   console.log("\nAlice staked 1000 DIVS locked 52 weeks (4x weight)");
   console.log("  pending WETH:", ethers.formatEther(pendingWeth));

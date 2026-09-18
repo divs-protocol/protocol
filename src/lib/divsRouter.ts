@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { robinhood } from "wagmi/chains";
-import { WETH, wethPerShare, type Market } from "./exchange";
+import { USDG, quoteDecimals, quotePerShare, type Market } from "./exchange";
 
 /**
  * Binding for DivsRouter.sol.
@@ -94,29 +94,30 @@ export const DEFAULT_FEE_BPS = 10;
 
 export const SLIPPAGE_OPTIONS = [0.1, 0.5, 1] as const;
 
-/** A USDG-quoted market cannot be traded through the router; the fee would arrive in USDG. */
-export const isTradeable = (m: Market) => m.quote === "WETH";
-
 /**
- * Shares received for an amount of WETH, after the protocol fee.
+ * Shares received for an amount of the quote asset, after the protocol fee.
  *
  * The pool's marginal price, so it ignores the price impact of the trade
  * itself - which is why the submitted minimum is this figure less slippage
  * rather than this figure.
  */
-export function quoteBuy(m: Market, sqrtPriceX96: bigint, wethIn: number, feeBps = DEFAULT_FEE_BPS) {
-  const price = wethPerShare(m, sqrtPriceX96);
+export function quoteBuy(m: Market, sqrtPriceX96: bigint, quoteIn: number, feeBps = DEFAULT_FEE_BPS) {
+  const price = quotePerShare(m, sqrtPriceX96);
   if (!price) return 0;
-  return (wethIn * (1 - feeBps / 10_000)) / price;
+  return (quoteIn * (1 - feeBps / 10_000)) / price;
 }
 
-/** WETH received for a number of shares, after the protocol fee. */
+/** Quote asset received for a number of shares, after the protocol fee. */
 export function quoteSell(m: Market, sqrtPriceX96: bigint, shares: number, feeBps = DEFAULT_FEE_BPS) {
-  const price = wethPerShare(m, sqrtPriceX96);
+  const price = quotePerShare(m, sqrtPriceX96);
   return shares * price * (1 - feeBps / 10_000);
 }
 
 const toWei = (n: number) => BigInt(Math.floor(n * 1e18));
+
+/** Amounts of the quote asset are not always eighteen decimals. USDG is six. */
+const toQuoteUnits = (m: Market, n: number) =>
+  BigInt(Math.floor(n * 10 ** quoteDecimals(m)));
 
 export type TradeStatus = "idle" | "approving" | "pending" | "confirming" | "done" | "error";
 
@@ -160,18 +161,59 @@ export function useRouterTrade() {
     setStatus("error");
   }, []);
 
+  /**
+   * A WETH market is bought with native ether, which the router wraps - one
+   * transaction, no approval. A USDG market has to move an ERC-20, so it needs
+   * an allowance first, and only when the current one is too small.
+   */
   const buy = useCallback(
-    async (market: Market, wethIn: number, minSharesOut: number) => {
+    async (market: Market, quoteIn: number, minSharesOut: number) => {
       if (!ROUTER_ADDRESS || !address || !client) return;
       reset();
       try {
+        if (market.quote === "WETH") {
+          setStatus("pending");
+          const tx = await writeContractAsync({
+            address: ROUTER_ADDRESS,
+            abi: routerAbi,
+            functionName: "buyWithETH",
+            args: [market.pool, toWei(minSharesOut), address],
+            value: toWei(quoteIn),
+            chainId: robinhood.id,
+          });
+          setHash(tx);
+          setStatus("confirming");
+          await client.waitForTransactionReceipt({ hash: tx });
+          setStatus("done");
+          return;
+        }
+
+        const amount = toQuoteUnits(market, quoteIn);
+        const allowance = await client.readContract({
+          address: USDG,
+          abi: erc20Abi,
+          functionName: "allowance",
+          args: [address, ROUTER_ADDRESS],
+        });
+
+        if (allowance < amount) {
+          setStatus("approving");
+          const approval = await writeContractAsync({
+            address: USDG,
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [ROUTER_ADDRESS, amount],
+            chainId: robinhood.id,
+          });
+          await client.waitForTransactionReceipt({ hash: approval });
+        }
+
         setStatus("pending");
         const tx = await writeContractAsync({
           address: ROUTER_ADDRESS,
           abi: routerAbi,
-          functionName: "buyWithETH",
-          args: [market.pool, toWei(minSharesOut), address],
-          value: toWei(wethIn),
+          functionName: "buy",
+          args: [market.pool, amount, toWei(minSharesOut), address],
           chainId: robinhood.id,
         });
         setHash(tx);
@@ -186,7 +228,7 @@ export function useRouterTrade() {
   );
 
   const sell = useCallback(
-    async (market: Market, shares: number, minWethOut: number, unwrap = true) => {
+    async (market: Market, shares: number, minQuoteOut: number, unwrap = true) => {
       if (!ROUTER_ADDRESS || !address || !client) return;
       reset();
       const amount = toWei(shares);
@@ -215,7 +257,14 @@ export function useRouterTrade() {
           address: ROUTER_ADDRESS,
           abi: routerAbi,
           functionName: "sell",
-          args: [market.pool, amount, toWei(minWethOut), address, unwrap],
+          // Unwrapping to ether is only possible on a WETH-quoted market.
+          args: [
+            market.pool,
+            amount,
+            toQuoteUnits(market, minQuoteOut),
+            address,
+            unwrap && market.quote === "WETH",
+          ],
           chainId: robinhood.id,
         });
         setHash(tx);
@@ -242,4 +291,4 @@ export function useRouterTrade() {
   return { ready, busy, status, hash, error, label, buy, sell, reset };
 }
 
-export { WETH };
+export { WETH } from "./exchange";

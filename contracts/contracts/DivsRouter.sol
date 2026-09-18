@@ -31,13 +31,20 @@ interface IDivsStaking {
 /// @notice Executes trades against the tokenized-equity pools and charges the
 /// protocol fee that DivsStaking distributes.
 ///
-/// @dev Every fee is taken in WETH, on whichever side of the trade WETH sits:
+/// @dev Markets are quoted in one of two assets. Most are paired against WETH,
+/// but around sixty are paired against USDG, and refusing those would leave
+/// more than half the listed markets unbuyable.
 ///
-///   buying  - WETH in, fee deducted before the swap, remainder swapped
-///   selling - token in, swapped for WETH, fee deducted from the proceeds
+/// The fee is always taken on the quote side of the trade:
 ///
-/// so the staking contract only ever receives one asset and never has to sell a
-/// long tail of stock tokens.
+///   buying  - quote in, fee deducted before the swap, remainder swapped
+///   selling - token in, swapped for quote, fee deducted from the proceeds
+///
+/// so the router never holds a stock token between trades. A USDG fee is
+/// converted to WETH when fees are flushed, not per trade, because a swap on
+/// every fill would cost more than the fee on a small one. The staking contract
+/// therefore still only ever receives WETH, which is what its accounting
+/// assumes.
 ///
 /// Swaps are executed directly against each pool rather than through a periphery
 /// router, which removes a deployment dependency and keeps the fee inside the
@@ -65,17 +72,31 @@ contract DivsRouter is Ownable, ReentrancyGuard {
 
     IWETH9 public immutable weth;
 
+    /// @notice The second quote asset. Six decimals, unlike WETH's eighteen.
+    IERC20 public immutable usdg;
+
+    /// @notice WETH/USDG pool, used to convert USDG fees before they are paid on.
+    address public immutable usdgWethPool;
+
     /// @notice DivsStaking. Fees accrue in the router until this is set.
     address public staking;
 
-    /// @notice Protocol fee in basis points, charged on the WETH side.
+    /// @notice Protocol fee in basis points, charged on the quote side.
     uint256 public feeBps;
 
     /// @notice WETH collected and not yet sent to staking.
     uint256 public pendingFees;
 
-    /// @notice Pending fees are pushed to staking once they reach this.
+    /// @notice USDG collected and not yet converted to WETH.
+    uint256 public pendingUsdgFees;
+
+    /// @notice Pending WETH fees are pushed to staking once they reach this.
     uint256 public flushThreshold;
+
+    /// @notice Pending USDG fees are converted and pushed once they reach this.
+    /// Kept separate because a market quoted only in USDG would otherwise never
+    /// reach the WETH threshold and its fees would sit here forever.
+    uint256 public usdgFlushThreshold;
 
     address private transient _callbackPool;
     address private transient _callbackTokenIn;
@@ -92,21 +113,35 @@ contract DivsRouter is Ownable, ReentrancyGuard {
     event FeeBpsUpdated(uint256 feeBps);
     event StakingUpdated(address staking);
     event FlushThresholdUpdated(uint256 threshold);
+    event UsdgFlushThresholdUpdated(uint256 threshold);
+    event UsdgFeesConverted(uint256 usdgIn, uint256 wethOut);
 
-    constructor(address _weth, address _staking, uint256 _feeBps, address _owner) Ownable(_owner) {
-        require(_weth != address(0), "Zero WETH");
+    constructor(
+        address _weth,
+        address _usdg,
+        address _usdgWethPool,
+        address _staking,
+        uint256 _feeBps,
+        address _owner
+    ) Ownable(_owner) {
+        require(_weth != address(0) && _usdg != address(0), "Zero token");
+        require(_usdgWethPool != address(0), "Zero pool");
         require(_feeBps <= MAX_FEE_BPS, "Fee too high");
         weth = IWETH9(_weth);
+        usdg = IERC20(_usdg);
+        usdgWethPool = _usdgWethPool;
         staking = _staking;
         feeBps = _feeBps;
         flushThreshold = 0.05 ether;
+        // USDG carries six decimals, so this is one hundred dollars.
+        usdgFlushThreshold = 100e6;
     }
 
     // --- trading -----------------------------------------------------------
 
-    /// @notice Buy a stock token with WETH.
+    /// @notice Buy a stock token with the asset its market is quoted in.
     /// @param pool The market's pool.
-    /// @param amountIn WETH to spend, fee included.
+    /// @param amountIn Quote asset to spend, fee included.
     /// @param amountOutMin Minimum tokens out, or the call reverts.
     /// @param recipient Who receives the tokens.
     function buy(address pool, uint256 amountIn, uint256 amountOutMin, address recipient)
@@ -115,8 +150,9 @@ contract DivsRouter is Ownable, ReentrancyGuard {
         returns (uint256 amountOut)
     {
         require(amountIn > 0, "Zero amount");
-        IERC20(address(weth)).safeTransferFrom(msg.sender, address(this), amountIn);
-        amountOut = _buy(pool, amountIn, amountOutMin, recipient);
+        address quote = _quoteOf(pool);
+        IERC20(quote).safeTransferFrom(msg.sender, address(this), amountIn);
+        amountOut = _buy(pool, quote, amountIn, amountOutMin, recipient);
     }
 
     /// @notice Buy a stock token with native ETH, wrapped on the way in.
@@ -127,8 +163,10 @@ contract DivsRouter is Ownable, ReentrancyGuard {
         returns (uint256 amountOut)
     {
         require(msg.value > 0, "Zero amount");
+        // A USDG pool cannot be paid in ether.
+        require(_quoteOf(pool) == address(weth), "Not WETH quoted");
         weth.deposit{value: msg.value}();
-        amountOut = _buy(pool, msg.value, amountOutMin, recipient);
+        amountOut = _buy(pool, address(weth), msg.value, amountOutMin, recipient);
     }
 
     /// @notice Sell a stock token for WETH.
@@ -143,7 +181,8 @@ contract DivsRouter is Ownable, ReentrancyGuard {
         bool unwrap
     ) external nonReentrant returns (uint256 amountOut) {
         require(amountIn > 0, "Zero amount");
-        address token = _otherToken(pool);
+        address quote = _quoteOf(pool);
+        address token = _otherToken(pool, quote);
         IERC20(token).safeTransferFrom(msg.sender, address(this), amountIn);
 
         // Proceeds land here so the fee can be taken before the payout.
@@ -152,31 +191,35 @@ contract DivsRouter is Ownable, ReentrancyGuard {
         amountOut = gross - fee;
         require(amountOut >= amountOutMin, "Too little received");
 
-        _accrue(fee);
+        _accrue(quote, fee);
 
         if (unwrap) {
+            require(quote == address(weth), "Not WETH quoted");
             weth.withdraw(amountOut);
             (bool ok,) = recipient.call{value: amountOut}("");
             require(ok, "ETH transfer failed");
         } else {
-            IERC20(address(weth)).safeTransfer(recipient, amountOut);
+            IERC20(quote).safeTransfer(recipient, amountOut);
         }
 
         emit Swapped(msg.sender, pool, token, amountIn, amountOut, fee);
     }
 
-    /// @dev WETH is already held by this contract when called.
-    function _buy(address pool, uint256 amountIn, uint256 amountOutMin, address recipient)
-        internal
-        returns (uint256 amountOut)
-    {
+    /// @dev The quote asset is already held by this contract when called.
+    function _buy(
+        address pool,
+        address quote,
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address recipient
+    ) internal returns (uint256 amountOut) {
         uint256 fee = (amountIn * feeBps) / BPS;
-        _accrue(fee);
+        _accrue(quote, fee);
 
-        amountOut = _swap(pool, address(weth), amountIn - fee, recipient);
+        amountOut = _swap(pool, quote, amountIn - fee, recipient);
         require(amountOut >= amountOutMin, "Too little received");
 
-        emit Swapped(msg.sender, pool, address(weth), amountIn, amountOut, fee);
+        emit Swapped(msg.sender, pool, quote, amountIn, amountOut, fee);
     }
 
     /// @dev Executes the swap and returns the output amount.
@@ -213,29 +256,58 @@ contract DivsRouter is Ownable, ReentrancyGuard {
         IERC20(_callbackTokenIn).safeTransfer(msg.sender, owed);
     }
 
-    /// @dev The pool's non-WETH side.
-    function _otherToken(address pool) internal view returns (address) {
+    /// @dev Which asset a pool prices its token against. Reverts for a pair
+    /// this contract cannot take a fee in, rather than guessing at one.
+    function _quoteOf(address pool) internal view returns (address) {
         address t0 = IUniswapV3Pool(pool).token0();
-        return t0 == address(weth) ? IUniswapV3Pool(pool).token1() : t0;
+        address t1 = IUniswapV3Pool(pool).token1();
+        if (t0 == address(weth) || t1 == address(weth)) return address(weth);
+        if (t0 == address(usdg) || t1 == address(usdg)) return address(usdg);
+        revert("Unsupported pair");
+    }
+
+    /// @dev The pool's non-quote side.
+    function _otherToken(address pool, address quote) internal view returns (address) {
+        address t0 = IUniswapV3Pool(pool).token0();
+        return t0 == quote ? IUniswapV3Pool(pool).token1() : t0;
     }
 
     // --- fees --------------------------------------------------------------
 
-    function _accrue(uint256 amount) internal {
+    function _accrue(address quote, uint256 amount) internal {
         if (amount == 0) return;
-        pendingFees += amount;
-        if (staking != address(0) && pendingFees >= flushThreshold) _flush();
+
+        if (quote == address(weth)) {
+            pendingFees += amount;
+        } else {
+            pendingUsdgFees += amount;
+        }
+
+        if (staking == address(0)) return;
+        if (pendingFees >= flushThreshold || pendingUsdgFees >= usdgFlushThreshold) _flush();
     }
 
     /// @notice Send collected fees to staking. Callable by anyone.
     function flushFees() external nonReentrant {
         require(staking != address(0), "Staking unset");
-        require(pendingFees > 0, "Nothing pending");
+        require(pendingFees > 0 || pendingUsdgFees > 0, "Nothing pending");
         _flush();
     }
 
     function _flush() internal {
+        // Convert first, so the vault is only ever notified of WETH. A failed
+        // conversion must not strand the WETH already collected, so the two are
+        // kept separate until the swap has actually returned.
+        uint256 usdgAmount = pendingUsdgFees;
+        if (usdgAmount > 0) {
+            pendingUsdgFees = 0;
+            uint256 converted = _swap(usdgWethPool, address(usdg), usdgAmount, address(this));
+            pendingFees += converted;
+            emit UsdgFeesConverted(usdgAmount, converted);
+        }
+
         uint256 amount = pendingFees;
+        if (amount == 0) return;
         pendingFees = 0;
         IERC20(address(weth)).forceApprove(staking, amount);
         IDivsStaking(staking).notifyFee(amount);
@@ -258,6 +330,11 @@ contract DivsRouter is Ownable, ReentrancyGuard {
     function setFlushThreshold(uint256 _threshold) external onlyOwner {
         flushThreshold = _threshold;
         emit FlushThresholdUpdated(_threshold);
+    }
+
+    function setUsdgFlushThreshold(uint256 _threshold) external onlyOwner {
+        usdgFlushThreshold = _threshold;
+        emit UsdgFlushThresholdUpdated(_threshold);
     }
 
     /// @dev Only the WETH contract pays ETH in, when unwrapping for a seller.

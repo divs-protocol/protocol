@@ -20,6 +20,14 @@ export default buildModule("DivsProtocol", (m) => {
   const weth = m.getParameter("weth");
   const owner = m.getParameter("owner", m.getAccount(0));
 
+  /**
+   * The second quote asset, and the pool used to convert fees taken in it.
+   * Around sixty of the listed markets are priced in USDG rather than WETH, and
+   * the router turns those fees into WETH before the vault sees them.
+   */
+  const usdg = m.getParameter("usdg");
+  const usdgWethPool = m.getParameter("usdgWethPool");
+
   /** Protocol fee in basis points, charged on the WETH side of every trade. */
   const feeBps = m.getParameter("feeBps", 10n);
 
@@ -28,7 +36,7 @@ export default buildModule("DivsProtocol", (m) => {
   // Pool 0 single-sided DIVS at 1x; the LP pool is added once the pair exists.
   m.call(staking, "addPool", [divs, 10_000n]);
 
-  const router = m.contract("DivsRouter", [weth, staking, feeBps, owner]);
+  const router = m.contract("DivsRouter", [weth, usdg, usdgWethPool, staking, feeBps, owner]);
 
   return { staking, router };
 });
