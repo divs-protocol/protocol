@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { formatUnits, parseUnits, maxUint256 } from "viem";
+import { formatUnits, parseUnits } from "viem";
 import {
   useAccount,
   useBlockNumber,
@@ -157,12 +157,21 @@ export default function StakeSection() {
   });
   const busy = isPending || isConfirming;
 
+  /**
+   * Approves exactly what is being staked, never an unlimited allowance.
+   *
+   * `maxUint256` here is the signature wallet drainers use, and wallet security
+   * scanners classify a dApp that requests one as wallet-draining - MetaMask
+   * put this site behind a "transactions designed to steal your funds" warning
+   * for it. An exact approval also means a bug or a compromise of the staking
+   * contract can never move more than the amount in front of the user.
+   */
   const approve = () =>
     writeContract({
       address: pool.token!,
       abi: erc20Abi,
       functionName: "approve",
-      args: [STAKING_ADDRESS!, maxUint256],
+      args: [STAKING_ADDRESS!, parsed],
     });
 
   const doStake = () =>
