@@ -1,6 +1,6 @@
 import { createConfig, http } from "wagmi";
 import { hardhat, robinhood } from "wagmi/chains";
-import { injected, walletConnect } from "wagmi/connectors";
+import { injected } from "wagmi/connectors";
 
 /**
  * A local `hardhat node` is a development convenience, not something a
@@ -15,17 +15,6 @@ const includeLocalChain =
 const localRpcUrl = process.env.NEXT_PUBLIC_LOCAL_RPC_URL ?? "http://127.0.0.1:8545";
 
 /**
- * A phone has no injected provider in Chrome or Safari, so an injected-only
- * app cannot be connected to from one at all - the button has nothing to talk
- * to unless the page is open inside a wallet's own browser. WalletConnect
- * deep-links into the wallet app instead, which is how a phone connects.
- *
- * It needs a project id from cloud.reown.com. Without one the connector is
- * left out rather than added in a state that fails when tapped.
- */
-const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
-
-/**
  * The origin the app is actually served from.
  *
  * In the browser this is the real origin, so it is right on the production
@@ -34,34 +23,14 @@ const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
  */
 export const SITE_URL = "https://www.divsprotocol.com";
 
-const siteOrigin =
-  typeof window !== "undefined"
-    ? window.location.origin
-    : (process.env.NEXT_PUBLIC_SITE_URL ?? SITE_URL);
-
-const connectors = [
-  injected(),
-  // Constructed in the browser only: the provider reaches for indexedDB, which
-  // does not exist while the pages prerender, and the server render is always
-  // disconnected anyway.
-  ...(walletConnectProjectId && typeof window !== "undefined"
-    ? [
-        walletConnect({
-          projectId: walletConnectProjectId,
-          showQrModal: true,
-          metadata: {
-            name: "DIVS Protocol",
-            description: "Decentralized exchange for tokenized equities on Robinhood Chain.",
-            // Wallets compare this against the origin that opened the session
-            // and warn the user when the two disagree, so it is read from the
-            // page rather than pinned to one deployment's URL.
-            url: siteOrigin,
-            icons: [`${siteOrigin}/logo.png`],
-          },
-        }),
-      ]
-    : []),
-];
+/**
+ * A browser-extension wallet only.
+ *
+ * WalletConnect was here so a phone could connect - a phone's browser has no
+ * injected provider - and was removed deliberately. Mobile visitors can connect
+ * only from inside a wallet app's own browser.
+ */
+const connectors = [injected()];
 
 const sharedOptions = {
   connectors,

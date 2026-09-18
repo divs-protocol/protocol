@@ -1,4 +1,2 @@
 allowBuilds:
-  # postinstall is a version-notice script, not a build step
-  '@reown/appkit': false
   unrs-resolver: true
