@@ -13,6 +13,7 @@ import {
 import { compact, num, usd, useProtocolStats, useStaking } from "@/lib/live";
 import Footer from "./Footer";
 import { InsiderFeedPanel } from "./InsiderPanel";
+import AnalyticsHero from "./AnalyticsHero";
 import MarketHeatmap from "./MarketHeatmap";
 import { SessionSummary, Trending, WhatsMoving } from "./SessionPanels";
 import SectorPanels from "./SectorPanels";
@@ -103,13 +104,7 @@ export default function AnalyticsSection() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-white font-bold tracking-tight text-xl mb-1">Analytics</h2>
-        <p className="text-[11px] text-gray-500">
-          What traded, and what each market paid its liquidity providers. Flow figures cover the
-          last {win} of chain.
-        </p>
-      </div>
+      <AnalyticsHero markets={markets} />
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Stat

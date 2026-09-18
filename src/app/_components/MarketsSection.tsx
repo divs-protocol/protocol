@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Search, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
 import { compact, num, usd, useLiveMarkets } from "@/lib/live";
+import { takeFocusedMarket } from "@/lib/marketFocus";
 import TokenPage from "./TokenPage";
 import Footer from "./Footer";
 
@@ -99,7 +100,10 @@ function SortHeader({
 
 export default function MarketsSection() {
   const { markets, window, loading } = useLiveMarkets();
-  const [selected, setSelected] = useState<string | null>(null);
+  // A search elsewhere can name a market to open. Read in the initialiser
+  // rather than an effect, so the token view is the first thing rendered
+  // instead of the index flashing up and being replaced.
+  const [selected, setSelected] = useState<string | null>(takeFocusedMarket);
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("volume");
