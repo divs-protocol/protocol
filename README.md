@@ -1,5 +1,7 @@
 # DIVS Protocol
 
+[![CI](https://github.com/divs-protocol/protocol/actions/workflows/ci.yml/badge.svg)](https://github.com/divs-protocol/protocol/actions/workflows/ci.yml)
+
 Exchange for tokenized equities on Robinhood Chain (4663). Equities and ETFs
 trade against on-chain pools; the router charges a fee on the WETH side of every
 trade and forwards it to the staking vault, which distributes it to staked
@@ -152,9 +154,31 @@ cd contracts && npx hardhat ignition deploy ignition/modules/DivsProtocol.ts --n
 `owner` should be a multisig, not the deploy key. It can change the fee within
 the 1% cap, the pool multipliers and the tier table. It cannot withdraw user
 funds, mint, or seize a stake, but a single key is still a single point of
-failure.
+failure, so move it before anyone stakes rather than after.
 
-### 3. Verify the source
+Both contracts are deployed owned by the deploying account and then handed over,
+rather than constructed under `owner`. The initial pool configuration is
+`onlyOwner`, so constructing under a multisig would revert the deployment
+partway through.
+
+### 3. Accept ownership from the multisig
+
+The transfer is two-step. Ignition nominates `owner`; nothing moves until the
+multisig calls `acceptOwnership` on each contract. Until it does, the deploy key
+still holds both, which is what makes a wrong address at step 2 recoverable.
+
+From the Safe, one transaction per contract, no arguments:
+
+```
+DivsStaking.acceptOwnership()
+DivsRouter.acceptOwnership()
+```
+
+Then confirm `owner()` returns the Safe on both, and that the deploy key no
+longer does. That check is the point of the exercise; skipping it means you do
+not know who owns the protocol.
+
+### 4. Verify the source
 
 So the explorer shows readable Solidity at the address and anyone can confirm
 the bytecode matches this repository.
@@ -170,7 +194,7 @@ cd contracts && npx hardhat verify --network robinhood <router address> <weth> <
 Constructor arguments must be given in the same order the contract declares
 them, or verification fails without saying why.
 
-### 4. Point the application at them
+### 5. Point the application at them
 
 The application reads deployed addresses from the environment:
 `NEXT_PUBLIC_DIVS_TOKEN_ADDRESS`, `NEXT_PUBLIC_DIVS_STAKING_ADDRESS`,
@@ -180,7 +204,11 @@ trading stay disabled while they are unset rather than failing when used.
 Set them in the hosting environment and redeploy. `NEXT_PUBLIC_` values are
 compiled in at build time, so an existing deployment will not pick them up.
 
-### 5. Publish the addresses
+### 6. Publish the addresses
 
 Record them in `SECURITY.md` and on the site. When a clone appears, and one
 will, that record is what people check against.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

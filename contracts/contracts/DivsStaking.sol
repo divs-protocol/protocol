@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /// @title DivsStaking
@@ -25,7 +25,13 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 /// `weight * accPerWeight - debt`, so a weight change must settle outstanding
 /// rewards into `pending` before it takes effect. Every mutating path routes
 /// through `_settle` for that reason.
-contract DivsStaking is Ownable, ReentrancyGuard {
+///
+/// Ownership transfers in two steps. The owner is intended to be a multisig,
+/// and a single-step transfer to an address that cannot transact - wrong chain,
+/// mistyped, not yet deployed - loses configuration control permanently. The
+/// nominee has to call `acceptOwnership`, which proves it can act before it
+/// gets to.
+contract DivsStaking is Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     uint256 private constant ACC_PRECISION = 1e18;

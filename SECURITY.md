@@ -152,7 +152,7 @@ no `permit`, no `setApprovalForAll`.
 
 ## 5. Test suite
 
-48 tests, all passing, in `contracts/contracts/*.t.sol`. Run with
+52 tests, all passing, in `contracts/contracts/*.t.sol`. Run with
 `cd contracts && npx hardhat test`.
 
 Three are fuzzed invariants at 256 runs each:
@@ -180,6 +180,10 @@ the 1% cap, change the staking address, and change the flush thresholds. Neither
 owner can withdraw user funds, mint, pause a position, or seize a stake. The
 owner is currently a single key; a multisig is intended before meaningful value
 is staked.
+
+Ownership transfers in two steps on both contracts: the nominee has to call
+`acceptOwnership`, so a transfer to an address that cannot transact does not
+silently lose configuration control.
 
 **Issuer pause.** Every Robinhood Stock Token is pausable by its issuer. While a
 token is paused, transfers of it fail and its market cannot trade. This is a

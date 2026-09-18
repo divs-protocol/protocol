@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 interface IUniswapV3Pool {
@@ -57,7 +57,13 @@ interface IDivsStaking {
 /// `flushThreshold`, rather than on every trade: a notify writes to the
 /// accumulator, and charging every small swap for that makes trading expensive.
 /// `flushFees` is permissionless, so a pending balance is never trapped.
-contract DivsRouter is Ownable, ReentrancyGuard {
+///
+/// Ownership transfers in two steps. The owner is intended to be a multisig,
+/// and a single-step transfer to an address that cannot transact - wrong chain,
+/// mistyped, not yet deployed - loses configuration control permanently. The
+/// nominee has to call `acceptOwnership`, which proves it can act before it
+/// gets to.
+contract DivsRouter is Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     /// @dev Uniswap V3 price bounds. Swapping to the limit means "no price

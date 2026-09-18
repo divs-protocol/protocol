@@ -27,6 +27,7 @@ contract DivsRouterTest is Test {
 
     address owner = address(0xA11CE);
     address alice = address(0xA1);
+    address multisig = address(0x5AFE);
 
     uint256 constant FEE_BPS = 10; // 0.10%
     /// @dev 1 AAPL = 0.1 WETH, so 1 WETH buys 10 AAPL.
@@ -208,6 +209,32 @@ contract DivsRouterTest is Test {
     }
 
     // --- access and limits -------------------------------------------------
+
+    /// @dev The fee rate and the staking address are the router's owner powers, so
+    /// the handoff to a multisig has to be one the wrong address cannot swallow.
+    function test_OwnershipTransferNeedsAcceptance() public {
+        vm.prank(owner);
+        router.transferOwnership(multisig);
+
+        assertEq(router.owner(), owner, "nominating does not hand over");
+
+        vm.prank(multisig);
+        vm.expectRevert();
+        router.setFeeBps(50);
+
+        vm.prank(multisig);
+        router.acceptOwnership();
+
+        assertEq(router.owner(), multisig, "the nominee now owns it");
+
+        vm.prank(multisig);
+        router.setFeeBps(50);
+        assertEq(router.feeBps(), 50, "and can configure");
+
+        vm.prank(owner);
+        vm.expectRevert();
+        router.setFeeBps(10);
+    }
 
     function test_CallbackRejectsUnexpectedCaller() public {
         vm.prank(address(0xBAD));

@@ -1,0 +1,77 @@
+name: CI
+
+# Runs on every push and every pull request, so the badge in the README is a
+# statement about the current commit rather than about whenever it last passed.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch cancels the first; there is no value in
+# finishing a run for a commit nobody will look at again.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    name: Contracts
+    runs-on: ubuntu-latest
+    # Solidity fuzz runs are the slow part; 256 runs across three invariants.
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      # The contracts package is npm, not pnpm. It is deliberately outside the
+      # web workspace: Hardhat resolves Solidity imports through node_modules,
+      # and a hoisted store makes that fragile.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: contracts/package-lock.json
+
+      - run: npm ci
+
+      - name: Compile
+        run: npx hardhat build
+
+      - name: Test
+        run: npx hardhat test
+
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.2
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      # No deployment addresses are set here. The build has to succeed without
+      # them, because that is exactly the state the live site is in until the
+      # contracts are deployed.
+      - name: Build
+        run: pnpm build

@@ -18,6 +18,7 @@ contract DivsStakingTest is Test {
     address alice = address(0xA1);
     address bob = address(0xB0B);
     address feeSource = address(0xFEE);
+    address multisig = address(0x5AFE);
 
     uint256 constant DIVS_POOL = 0;
     uint256 constant LP_POOL = 1;
@@ -341,6 +342,53 @@ contract DivsStakingTest is Test {
         vm.prank(alice);
         vm.expectRevert();
         staking.addPool(address(lp), 10_000);
+    }
+
+    /// @dev The owner is meant to become a multisig, and a one-step transfer to an
+    /// address that cannot transact would lose configuration control for good.
+    /// Nominating changes nothing until the nominee proves it can act.
+    function test_OwnershipTransferNeedsAcceptance() public {
+        vm.prank(owner);
+        staking.transferOwnership(multisig);
+
+        assertEq(staking.owner(), owner, "nominating does not hand over");
+        assertEq(staking.pendingOwner(), multisig, "the nominee is recorded");
+
+        vm.prank(multisig);
+        vm.expectRevert();
+        staking.addPool(address(lp), 10_000);
+
+        // The deployer still holds it, so a wrong nominee is still recoverable.
+        vm.prank(owner);
+        staking.addPool(address(lp), 10_000);
+    }
+
+    function test_NominatedOwnerTakesControlOnAcceptance() public {
+        vm.prank(owner);
+        staking.transferOwnership(multisig);
+        vm.prank(multisig);
+        staking.acceptOwnership();
+
+        assertEq(staking.owner(), multisig, "the nominee now owns it");
+        assertEq(staking.pendingOwner(), address(0), "and the nomination is cleared");
+
+        vm.prank(multisig);
+        staking.addPool(address(lp), 10_000);
+
+        vm.prank(owner);
+        vm.expectRevert();
+        staking.addPool(address(lp), 10_000);
+    }
+
+    function test_OnlyTheNomineeCanAccept() public {
+        vm.prank(owner);
+        staking.transferOwnership(multisig);
+
+        vm.prank(alice);
+        vm.expectRevert();
+        staking.acceptOwnership();
+
+        assertEq(staking.owner(), owner, "an outsider cannot take it");
     }
 
     // --- solvency invariants ----------------------------------------------
