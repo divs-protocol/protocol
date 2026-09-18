@@ -14,6 +14,7 @@ import { compact, num, usd, useProtocolStats, useStaking } from "@/lib/live";
 import Footer from "./Footer";
 import { InsiderFeedPanel } from "./InsiderPanel";
 import MarketHeatmap from "./MarketHeatmap";
+import { SessionSummary, Trending, WhatsMoving } from "./SessionPanels";
 import SectorPanels from "./SectorPanels";
 
 /**
@@ -128,6 +129,21 @@ export default function AnalyticsSection() {
           loading={loading}
         />
       </div>
+
+      {/* the sentence first: what happened, and which markets caused it */}
+      <SessionSummary
+        markets={markets}
+        volume={volume}
+        fees={fees}
+        tvl={tvl}
+        txns={txns}
+        win={win}
+        loading={loading}
+      />
+
+      <WhatsMoving markets={markets} win={win} loading={loading} />
+
+      <Trending markets={markets} win={win} />
 
       {/* where the fees came from */}
       <MarketHeatmap markets={markets} loading={loading} />
