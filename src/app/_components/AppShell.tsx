@@ -1,14 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDisconnect } from "wagmi";
 import { 
   BarChart2, Layers, Wallet, ClipboardList, User, 
   Headphones, Settings, BookOpen, 
   Search, Bell, ArrowUpRight, ArrowDownRight, ChevronDown,
-  Menu, X as Close
+  Menu, X as Close, Copy, Check, LogOut, ExternalLink
 } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
 import DocsSection from "./DocsSection";
@@ -172,6 +172,127 @@ const NAV_ITEMS = [
   { id: "account", icon: User, label: "Account" },
 ];
 
+const EXPLORER = "https://robinhoodchain.blockscout.com";
+
+/**
+ * The account menu.
+ *
+ * Replaces two things that were wrong. The header used to print the connected
+ * address beside a pill reading "DIVS Trader", which was a hardcoded string
+ * shown to everyone including visitors with no wallet, above a chevron that
+ * opened nothing. And the only way to disconnect was to click the address
+ * itself, which did it immediately with no way back.
+ *
+ * Now the address lives behind the chevron, where a chevron implies it is, and
+ * disconnecting is a labelled choice rather than a side effect of clicking the
+ * thing that shows you who you are.
+ */
+function AccountMenu({ address }: { address: `0x${string}` }) {
+  const { disconnect } = useDisconnect();
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {
+      /* clipboard unavailable, the address is on screen to read */
+    }
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="flex items-center gap-2 bg-[#1B1E24] border border-[#232730] px-2.5 py-1.5 rounded-xl hover:border-[#2C313B] transition"
+      >
+        <span className="w-5 h-5 rounded-full bg-[#10B981] text-black font-extrabold flex items-center justify-center text-[9px] uppercase">
+          {/* Derived from the wallet, so it is at least the connected account's
+              own mark rather than two letters typed into the markup. */}
+          {address.slice(2, 4)}
+        </span>
+        <span className="hidden sm:inline font-mono text-white text-xs whitespace-nowrap">
+          {address.slice(0, 6)}…{address.slice(-4)}
+        </span>
+        <ChevronDown
+          size={13}
+          className={`text-gray-400 transition ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full mt-2 w-[248px] bg-[#14161B] border border-[#232730] rounded-xl overflow-hidden shadow-xl shadow-black/50 z-50"
+        >
+          <div className="px-3.5 py-3 border-b border-[#232730]">
+            <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1.5">
+              Connected wallet
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[12px] text-white truncate">
+                {address.slice(0, 10)}…{address.slice(-8)}
+              </span>
+              <button
+                onClick={copy}
+                aria-label="Copy address"
+                className="ml-auto shrink-0 text-gray-500 hover:text-[#10B981] transition p-1"
+              >
+                {copied ? <Check size={13} /> : <Copy size={13} />}
+              </button>
+            </div>
+            <div className="text-[10px] text-gray-600 mt-1">Robinhood Chain · 4663</div>
+          </div>
+
+          <a
+            href={`${EXPLORER}/address/${address}`}
+            target="_blank"
+            rel="noreferrer"
+            role="menuitem"
+            className="flex items-center gap-2 px-3.5 py-2.5 text-[12px] text-gray-300 hover:bg-[#1B1E24] hover:text-white transition"
+          >
+            <ExternalLink size={13} />
+            View on explorer
+          </a>
+
+          <button
+            onClick={() => {
+              setOpen(false);
+              disconnect();
+            }}
+            role="menuitem"
+            className="w-full flex items-center gap-2 px-3.5 py-2.5 text-[12px] text-gray-300 hover:bg-red-500/10 hover:text-red-400 transition border-t border-[#232730]"
+          >
+            <LogOut size={13} />
+            Disconnect
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AppShell({ section }: { section: string }) {
   const router = useRouter();
   const activeSection = section;
@@ -186,7 +307,6 @@ export default function AppShell({ section }: { section: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { address, isConnected, settling } = useWalletStatus();
   const openWallet = useConnectWallet();
-  const { disconnect } = useDisconnect();
   /*
    * The dashboard reads the same snapshot every other section does. It used to
    * be six hardcoded tickers, a chart whose axis ran to 60,000 for a $124
@@ -414,13 +534,8 @@ export default function AppShell({ section }: { section: string }) {
                 <Bell size={15} />
               </button>
               
-              {isConnected ? (
-                <button 
-                  onClick={() => disconnect()}
-                  className="px-3 py-1.5 bg-[#1B1E24] border border-[#10B981] text-[#10B981] rounded-xl font-mono text-xs hover:bg-red-500/10 hover:border-red-500 hover:text-red-400 transition"
-                >
-                  {address?.slice(0, 6)}...{address?.slice(-4)}
-                </button>
+              {isConnected && address ? (
+                <AccountMenu address={address} />
               ) : (
                 <button
                   onClick={openWallet}
@@ -437,15 +552,6 @@ export default function AppShell({ section }: { section: string }) {
                   )}
                 </button>
               )}
-
-              {/* User Profile Pill */}
-              <div className="hidden lg:flex items-center space-x-2 bg-[#1B1E24] border border-[#232730] px-2.5 py-1 rounded-xl">
-                <div className="w-5 h-5 rounded-full bg-[#10B981] text-black font-extrabold flex items-center justify-center text-[9px]">
-                  DV
-                </div>
-                <span className="text-white font-medium text-xs">DIVS Trader</span>
-                <ChevronDown size={13} className="text-gray-400" />
-              </div>
             </div>
           </header>
 
