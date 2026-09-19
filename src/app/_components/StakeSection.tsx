@@ -74,6 +74,15 @@ export default function StakeSection() {
   const queryClient = useQueryClient();
 
   const [poolKey, setPoolKey] = useState<"divs" | "lp">("divs");
+  /**
+   * Which side of the form is showing.
+   *
+   * Withdrawing used to be a small button at the end of a position row that
+   * pulled the entire stake in one click, with nothing to confirm and no way to
+   * take out part of it. The contract has always accepted an amount; only the
+   * interface insisted on all of it.
+   */
+  const [mode, setMode] = useState<"stake" | "withdraw">("stake");
   // Wall clock lives in state so render stays pure and the server, which has a
   // different clock, does not disagree with the first client paint.
   const [now, setNow] = useState(0);
@@ -128,6 +137,7 @@ export default function StakeSection() {
 
   const myWeight = (divsPos?.[1] ?? 0n) + (lpPos?.[1] ?? 0n);
   const myStaked = (divsPos?.[0] ?? 0n) + (lpPos?.[0] ?? 0n);
+  const hasRewards = (rewards?.[0] ?? 0n) > 0n || (rewards?.[1] ?? 0n) > 0n;
   const share = totalWeight && totalWeight > 0n ? Number((myWeight * 10000n) / totalWeight) / 100 : 0;
 
   /* ---------- preview maths (exact, local) ---------- */
@@ -138,7 +148,16 @@ export default function StakeSection() {
     return n * multiplier * (poolKey === "lp" ? 2 : 1);
   }, [amount, multiplier, poolKey]);
 
-  const balance = poolKey === "divs" ? divsBal : lpBal;
+  const walletBalance = poolKey === "divs" ? divsBal : lpBal;
+  const activePos = poolKey === "divs" ? divsPos : lpPos;
+  const stakedHere = activePos?.[0] ?? 0n;
+  const lockEndsAt = Number(activePos?.[2] ?? 0n);
+  const lockedHere = now > 0 && lockEndsAt > now;
+  const lockDaysLeft = lockedHere ? Math.ceil((lockEndsAt - now) / 86400) : 0;
+
+  /** Stake is capped by the wallet, withdraw by what is already in the pool. */
+  const balance = mode === "stake" ? walletBalance : stakedHere;
+
   const parsed = (() => {
     try {
       return amount ? parseUnits(amount, 18) : 0n;
@@ -146,7 +165,8 @@ export default function StakeSection() {
       return 0n;
     }
   })();
-  const needsApproval = allowance !== undefined && parsed > 0n && allowance < parsed;
+  const needsApproval =
+    mode === "stake" && allowance !== undefined && parsed > 0n && allowance < parsed;
 
   /* ---------- writes ---------- */
 
@@ -185,8 +205,21 @@ export default function StakeSection() {
   const doClaim = () =>
     writeContract({ address: STAKING_ADDRESS!, abi: stakingAbi, functionName: "claim" });
 
-  const doUnstake = (poolId: bigint, amt: bigint) =>
-    writeContract({ address: STAKING_ADDRESS!, abi: stakingAbi, functionName: "unstake", args: [poolId, amt] });
+  const doWithdraw = () =>
+    writeContract({
+      address: STAKING_ADDRESS!,
+      abi: stakingAbi,
+      functionName: "unstake",
+      args: [pool.id, parsed],
+    });
+
+  /** Sends the form to withdraw for one pool, filled with the whole position. */
+  const openWithdraw = (key: "divs" | "lp", staked: bigint) => {
+    setMode("withdraw");
+    setPoolKey(key);
+    setAmount(staked > 0n ? formatUnits(staked, 18) : "");
+    reset();
+  };
 
   if (!isConnected) {
     return (
@@ -228,8 +261,40 @@ export default function StakeSection() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Your stake" value={fmt(myStaked)} sub="DIVS + LP" />
         <Stat label="Your weight" value={fmt(myWeight)} sub={`${share.toFixed(2)}% of pool`} />
-        <Stat label="Claimable fees" value={fmt(rewards?.[0])} sub="WETH" accent />
-        <Stat label="Claimable emissions" value={fmt(rewards?.[1])} sub="DIVS" />
+
+        {/*
+          Claim sits beside the figure it acts on. It used to be a small button
+          in another panel's header, two panels away from the numbers telling
+          you there was anything to collect.
+        */}
+        <div className="col-span-2 bg-[#14161B] border border-[#232730] rounded-2xl p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-8 min-w-0">
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1.5">
+                Claimable fees
+              </div>
+              <div className="font-mono text-xl text-[#10B981]">{fmt(rewards?.[0])}</div>
+              <div className="text-[10px] text-gray-600 mt-1">WETH</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1.5">
+                Emissions
+              </div>
+              <div className="font-mono text-xl text-white">{fmt(rewards?.[1])}</div>
+              <div className="text-[10px] text-gray-600 mt-1">DIVS</div>
+            </div>
+          </div>
+
+          <button
+            onClick={doClaim}
+            disabled={!live || busy || !hasRewards}
+            title={hasRewards ? undefined : "Nothing to claim yet"}
+            className="flex items-center gap-1.5 bg-[#10B981] hover:bg-[#0EA372] disabled:opacity-30 disabled:cursor-not-allowed text-black text-[11px] font-bold px-4 py-2.5 rounded-xl transition flex-shrink-0"
+          >
+            {busy && <Loader2 size={12} className="animate-spin" />}
+            Claim
+          </button>
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-[1fr_340px] gap-3 items-start">
@@ -237,14 +302,9 @@ export default function StakeSection() {
         <Panel
           title="Your positions"
           right={
-            <button
-              onClick={doClaim}
-              disabled={!live || busy || !((rewards?.[0] ?? 0n) > 0n || (rewards?.[1] ?? 0n) > 0n)}
-              className="flex items-center gap-1.5 bg-[#10B981] hover:bg-[#0EA372] disabled:opacity-30 disabled:cursor-not-allowed text-black text-[10px] font-bold px-3 py-1.5 rounded-lg transition"
-            >
-              {busy && <Loader2 size={11} className="animate-spin" />}
-              Claim all
-            </button>
+            <span className="text-[10px] text-gray-500">
+              {myStaked > 0n ? `${share.toFixed(2)}% of total weight` : "Nothing staked yet"}
+            </span>
           }
         >
           <div className="divide-y divide-[#1F2228]">
@@ -279,12 +339,12 @@ export default function StakeSection() {
                         </div>
                       </div>
                       <button
-                        onClick={() => doUnstake(p.id, amt)}
-                        disabled={!live || busy || amt === 0n || locked}
+                        onClick={() => openWithdraw(p.key, amt)}
+                        disabled={!live || amt === 0n || locked}
                         title={locked ? `Locked for ${daysLeft} more days` : undefined}
                         className="bg-[#232730] hover:bg-[#2C313B] disabled:opacity-30 disabled:cursor-not-allowed text-white text-[10px] font-semibold px-3 py-1.5 rounded-lg transition"
                       >
-                        Unstake
+                        Withdraw
                       </button>
                     </div>
                   </div>
@@ -299,8 +359,29 @@ export default function StakeSection() {
           </div>
         </Panel>
 
-        {/* stake form */}
-        <Panel title="Stake">
+        {/* stake and withdraw, one form with two sides */}
+        <Panel
+          title={mode === "stake" ? "Stake" : "Withdraw"}
+          right={
+            <div className="flex items-center gap-1 bg-[#14161B] border border-[#232730] rounded-lg p-0.5">
+              {(["stake", "withdraw"] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => {
+                    setMode(m);
+                    setAmount("");
+                    reset();
+                  }}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-bold capitalize transition ${
+                    mode === m ? "bg-[#10B981] text-black" : "text-gray-400 hover:text-white"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          }
+        >
           <div className="p-4 space-y-4">
             <div className="grid grid-cols-2 gap-1.5 bg-[#14161B] border border-[#232730] rounded-xl p-1">
               {POOLS.map((p) => (
@@ -323,7 +404,7 @@ export default function StakeSection() {
                   onClick={() => balance && setAmount(formatUnits(balance, 18))}
                   className="text-[10px] text-gray-500 hover:text-[#10B981] transition font-mono"
                 >
-                  Balance {fmt(balance)}
+                  {mode === "stake" ? "Balance" : "Staked"} {fmt(balance)}
                 </button>
               </div>
               <div className="flex items-center bg-[#14161B] border border-[#232730] rounded-xl px-3 py-2.5">
@@ -338,6 +419,8 @@ export default function StakeSection() {
               </div>
             </div>
 
+            {mode === "stake" && (
+            <>
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-[10px] text-gray-500">Lock</label>
@@ -373,6 +456,30 @@ export default function StakeSection() {
                 </span>
               </div>
             </div>
+            </>
+            )}
+
+            {mode === "withdraw" && (
+              <div className="bg-[#14161B] border border-[#232730] rounded-xl p-3 space-y-2">
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-gray-500">Staked in this pool</span>
+                  <span className="font-mono text-white">{fmt(stakedHere)}</span>
+                </div>
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-gray-500">Left after this</span>
+                  <span className="font-mono text-white">
+                    {fmt(parsed > stakedHere ? 0n : stakedHere - parsed)}
+                  </span>
+                </div>
+                {lockedHere && (
+                  <p className="flex items-start gap-1.5 text-[10px] text-amber-400 leading-relaxed pt-1">
+                    <Lock size={10} className="mt-0.5 flex-shrink-0" />
+                    Locked for {lockDaysLeft} more {lockDaysLeft === 1 ? "day" : "days"}. A lock
+                    cannot be shortened, so nothing can be withdrawn until it ends.
+                  </p>
+                )}
+              </div>
+            )}
 
             {error && (
               <p className="text-[10px] text-red-400 leading-relaxed">
@@ -384,18 +491,43 @@ export default function StakeSection() {
             )}
 
             <button
-              onClick={needsApproval ? approve : doStake}
-              disabled={!live || busy || parsed === 0n}
+              onClick={mode === "withdraw" ? doWithdraw : needsApproval ? approve : doStake}
+              disabled={
+                !live ||
+                busy ||
+                parsed === 0n ||
+                parsed > (balance ?? 0n) ||
+                (mode === "withdraw" && lockedHere)
+              }
               title={live ? undefined : "Staking contract not deployed"}
-              className="w-full flex items-center justify-center gap-2 bg-[#10B981] hover:bg-[#0EA372] disabled:opacity-30 disabled:cursor-not-allowed text-black py-3 rounded-xl text-[11px] font-bold transition"
+              className={`w-full flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed py-3 rounded-xl text-[11px] font-bold transition ${
+                mode === "withdraw"
+                  ? "bg-[#232730] hover:bg-[#2C313B] text-white"
+                  : "bg-[#10B981] hover:bg-[#0EA372] text-black"
+              }`}
             >
               {busy && <Loader2 size={12} className="animate-spin" />}
-              {needsApproval ? `Approve ${pool.label}` : "Stake"}
+              {mode === "withdraw"
+                ? parsed > 0n && parsed >= stakedHere
+                  ? `Withdraw all ${pool.label}`
+                  : `Withdraw ${pool.label}`
+                : needsApproval
+                  ? `Approve ${pool.label}`
+                  : "Stake"}
             </button>
 
+            {parsed > (balance ?? 0n) && (
+              <p className="text-[10px] text-amber-400">
+                {mode === "stake"
+                  ? "More than the wallet holds."
+                  : "More than is staked in this pool."}
+              </p>
+            )}
+
             <p className="text-[10px] leading-relaxed text-gray-600">
-              A lock cannot be shortened. Rewards keep accruing while locked and claiming never
-              touches your principal.
+              {mode === "stake"
+                ? "A lock cannot be shortened. Rewards keep accruing while locked and claiming never touches your principal."
+                : "Withdrawing takes only the amount entered. Rewards stay claimable and are not touched by this."}
             </p>
           </div>
         </Panel>
