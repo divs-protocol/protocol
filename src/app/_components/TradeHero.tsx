@@ -105,16 +105,16 @@ export default function TradeHero({
           <Eyebrow>Order entry</Eyebrow>
 
           <h1 className="text-white font-bold tracking-tight text-3xl md:text-5xl leading-[1.06] mb-5">
-            Depth of book,
+            Buy and sell,
             <br className="hidden md:inline" />
-            from the pool itself.
+            any hour of any day.
           </h1>
 
           <p className="text-sm md:text-[15px] leading-relaxed text-gray-400 max-w-lg mb-4">
-            Nothing rests on an order book here. Each level is derived from the pool&apos;s own
-            liquidity: the size that moves the price a given distance, which is what a book tells
-            you anyway. Quotes use the marginal price, so the minimum you submit is what protects
-            you from the rest.
+            Pick a market, set a size, set the worst price you will accept. The trade settles
+            against the pool in one transaction. Nothing rests on an order book here, so the depth
+            you see is the size that moves the price a given distance, computed from the pool
+            itself.
           </p>
 
           {!ROUTER_ADDRESS && (

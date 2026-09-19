@@ -183,14 +183,14 @@ export default function AnalyticsHero({
           <Eyebrow>Robinhood Chain · 4663</Eyebrow>
 
           <h1 className="text-white font-bold tracking-tight text-3xl md:text-5xl leading-[1.06] mb-5">
-            The Robinhood Chain
+            What the market
             <br className="hidden md:inline" />
-            equities market, explained.
+            is doing right now.
           </h1>
 
           <p className="text-sm md:text-[15px] leading-relaxed text-gray-400 max-w-lg mb-8">
-            Live prices, pool depth and insider filings across every tokenized equity and fund with
-            a market on chain. Read from the pools themselves, not from a vendor feed.
+            Breadth, volume, sector rotation and insider filings across all {MARKET_COUNT} markets.
+            Every figure is read from the pools and from the SEC, not from a vendor feed.
           </p>
 
           <div className="relative max-w-md mb-8">

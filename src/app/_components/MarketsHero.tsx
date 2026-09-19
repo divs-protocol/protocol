@@ -101,20 +101,20 @@ export default function MarketsHero({
           <Eyebrow>{markets.length} listed · one pool each</Eyebrow>
 
           <h1 className="text-white font-bold tracking-tight text-3xl md:text-5xl leading-[1.06] mb-5">
-            Every listed market,
+            Every stock you can
             <br className="hidden md:inline" />
-            read from its own pool.
+            trade here.
           </h1>
 
           <p className="text-sm md:text-[15px] leading-relaxed text-gray-400 max-w-lg mb-4">
-            Price comes from each pool&apos;s current tick, depth from what the contract holds,
-            volume and trade count from its own swap log. Nothing on this page is quoted by a
-            vendor.
+            {markets.length} tokenized equities and funds on Robinhood Chain, each with its own
+            pool. Price, depth, volume and trade count are read from the contracts themselves, so
+            nothing on this page is quoted by a vendor.
           </p>
 
           <p className="text-[12px] text-gray-500 max-w-lg mb-8">
-            Select a market to open its chart, its tape and the insider filings for the company
-            behind it.
+            Open any market for its chart, its tape and the insider filings for the company behind
+            it.
           </p>
 
           <div className="flex flex-wrap gap-x-10 gap-y-4">

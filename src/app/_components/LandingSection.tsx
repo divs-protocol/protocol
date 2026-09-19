@@ -4,6 +4,8 @@ import { useState } from "react";
 import { ArrowRight, Copy, Check } from "lucide-react";
 import Footer from "./Footer";
 import { useNav } from "./nav";
+import { MARKETS } from "@/lib/exchange";
+import { DEFAULT_FEE_BPS } from "@/lib/divsRouter";
 
 /**
  * Landing view for the protocol - the "what is this" page, shown when the top
@@ -217,9 +219,11 @@ function Hero() {
             users, not its shareholders.
           </h1>
           <p className="text-[13px] md:text-sm leading-relaxed text-gray-400 max-w-xl mb-12">
-            Buy Apple at 3am. Sell gold on a Sunday. Every fill pays a fee, and that fee does not
-            become a brokerage&apos;s profit - it goes to whoever is staking $DIVS when the trade
-            lands. Lock longer, take a bigger cut.
+            {/* A definition, not a slogan. Someone arriving here should be able
+                to say what this is after one sentence. */}
+            DIVS Protocol is an exchange for tokenized equities on Robinhood Chain. {MARKETS.length}{" "}
+            stocks and funds, open every hour of every day. Every trade pays a fee, and every fee
+            goes to holders staking $DIVS.
           </p>
 
           <div className="flex flex-wrap items-center gap-3 mb-20">
@@ -264,10 +268,10 @@ function Hero() {
 function TwoRoles() {
   return (
     <Section className="border-t border-[#1F2228]">
-      <Title>Two assets. Two jobs.</Title>
+      <Title>What you trade, and what you stake</Title>
       <Lede>
-        You do not stake the stocks. Stock tokens are what gets traded. $DIVS is what earns from the
-        trading.
+        These are two different assets. Stock tokens are what you buy and sell. $DIVS is what earns
+        from other people buying and selling. You do not stake the stocks.
       </Lede>
 
       <div className="grid md:grid-cols-2 gap-4 mt-8">
@@ -276,11 +280,12 @@ function TwoRoles() {
             Traded · NVDA, AAPL, TSLA…
           </div>
           <h3 className="text-white font-bold text-lg mb-2 tracking-tight">
-            Buy the stock. Any hour.
+            Stock tokens
           </h3>
           <p className="text-[11px] leading-relaxed text-gray-400 mb-4">
-            Equity exposure that settles in seconds, wallet to wallet. No market hours. No
-            clearinghouse. Nobody between you and the position.
+            Equity exposure that settles in seconds, wallet to wallet. Issued by Robinhood, traded
+            against on-chain pools. No market hours, no clearing house, nobody between you and the
+            position.
           </p>
           <DataRow label="Settlement" value="on-chain, instant" />
           <DataRow label="Trading window" value="24 / 7" />
@@ -292,11 +297,11 @@ function TwoRoles() {
             Staked · $DIVS
           </div>
           <h3 className="text-white font-bold text-lg mb-2 tracking-tight">
-            Own the fees. Nothing else.
+            Staked $DIVS
           </h3>
           <p className="text-[11px] leading-relaxed text-gray-400 mb-4">
             Stake $DIVS on its own, or DIVS/WETH LP for more weight. You take a cut of every fee the
-            platform charges, for as long as you stay staked.
+            exchange charges, paid in WETH, for as long as you stay staked.
           </p>
           <DataRow label="Paid in" value="WETH" />
           <DataRow label="Boost" value="up to 4x" />
@@ -312,34 +317,79 @@ function TwoRoles() {
 }
 
 function HowItWorks() {
+  /*
+   * Plain sentences, in the order a person actually meets them.
+   *
+   * The previous version led with "Trade. Collect. Distribute." and described
+   * the protocol's internals. That is the right content for the docs and the
+   * wrong content for someone deciding whether this is for them.
+   */
   const steps = [
+    "Connect a wallet. There is no account to open, no broker and no paperwork.",
+    `Buy any of ${MARKETS.length} tokenized stocks and funds with ether or USDG, in one transaction.`,
+    `Every trade pays a protocol fee of ${(DEFAULT_FEE_BPS / 100).toFixed(2)}%, charged on the cash side and never in the stock.`,
+    "That fee is split across staked $DIVS by weight. Lock for longer and your weight rises, up to 4x.",
+  ];
+
+  const parts: [string, string][] = [
     [
-      "Trade",
-      "Someone buys or sells. It executes on-chain and settles immediately - no T+2, no clearing house.",
+      "Exchange",
+      `The app at divsprotocol.com. ${MARKETS.length} markets with live prices, charts, depth and the insider filings for each company.`,
     ],
     [
-      "Collect",
-      "The fee is taken once, at execution. Buy-side fees arrive as the traded token and are swapped to WETH upstream, so the vault holds one asset and never a long tail of dust.",
+      "$DIVS",
+      "The token you stake. It is launched on Pons and the protocol neither mints it nor owns it.",
     ],
     [
-      "Distribute",
-      "The WETH lands in the staking contract and splits across every staked position by weight. Claim it whenever you like.",
+      "DivsRouter",
+      "The contract that executes a trade against a pool and charges the protocol fee in the same call.",
+    ],
+    [
+      "DivsStaking",
+      "The contract that holds staked $DIVS and pays out the fees it receives, by weight.",
+    ],
+    [
+      "Stock tokens",
+      "Robinhood Stock Tokens. Robinhood issues them, this protocol only reads and routes them.",
+    ],
+    [
+      "Robinhood Chain",
+      "Where all of it runs. Chain id 4663, gas paid in ether, blocks every tenth of a second.",
     ],
   ];
 
   return (
     <Section className="border-t border-[#1F2228]">
       <Title>How it works</Title>
-      <Lede>Three steps. The fee never leaves the chain.</Lede>
+      <Lede>Four steps, in the order you meet them.</Lede>
 
-      <div className="grid md:grid-cols-3 gap-8 mt-9">
-        {steps.map(([title, body], i) => (
-          <div key={title} className="border-t border-[#232730] pt-5">
-            <div className="font-mono text-2xl text-[#10B981] mb-3">
+      <ol className="mt-8 space-y-4 max-w-3xl">
+        {steps.map((body, i) => (
+          <li key={body} className="flex gap-4">
+            <span className="font-mono text-[11px] text-[#10B981] pt-0.5 shrink-0">
               {String(i + 1).padStart(2, "0")}
-            </div>
-            <h3 className="text-white font-bold text-base mb-2 tracking-tight">{title}</h3>
-            <p className="text-[11px] leading-relaxed text-gray-400">{body}</p>
+            </span>
+            <span className="text-[13px] md:text-sm leading-relaxed text-gray-300">{body}</span>
+          </li>
+        ))}
+      </ol>
+
+      <div className="mt-12 border border-[#232730] rounded-2xl overflow-hidden">
+        <div className="grid grid-cols-[130px_1fr] sm:grid-cols-[180px_1fr] bg-[#14161B] border-b border-[#232730]">
+          <span className="px-4 py-3 text-[10px] font-mono uppercase tracking-wider text-gray-500">
+            Part
+          </span>
+          <span className="px-4 py-3 text-[10px] font-mono uppercase tracking-wider text-gray-500">
+            What it is
+          </span>
+        </div>
+        {parts.map(([part, what]) => (
+          <div
+            key={part}
+            className="grid grid-cols-[130px_1fr] sm:grid-cols-[180px_1fr] border-b border-[#1F2228] last:border-0"
+          >
+            <span className="px-4 py-3.5 font-mono text-[11px] text-white">{part}</span>
+            <span className="px-4 py-3.5 text-[12px] leading-relaxed text-gray-400">{what}</span>
           </div>
         ))}
       </div>
@@ -362,10 +412,10 @@ function Weighting() {
       <GridMotif className="bottom-0 left-0 opacity-60 hidden lg:block" />
       <div className="relative grid lg:grid-cols-2 gap-10 items-start">
         <div>
-          <Title>Commitment is the multiplier.</Title>
+          <Title>How your share is worked out</Title>
           <Lede>
-            Fees split by weight. Not evenly, and not by size alone. Three multipliers set yours:
-            which pool, how large, and how long you locked it.
+            Fees are split by weight, not evenly and not by size alone. Three things set your
+            weight: which pool you staked in, how much you staked, and how long you locked it for.
           </Lede>
 
           <div className="bg-[#101216] border border-[#232730] rounded-xl p-4 mt-6 mb-6 overflow-x-auto">
@@ -421,10 +471,10 @@ function FeeFlow() {
 
   return (
     <Section className="border-t border-[#1F2228]">
-      <Title>Fees don&apos;t sit. They circulate.</Title>
+      <Title>Where a fee goes</Title>
       <Lede>
-        Every trade pays a fee. The treasury routes it straight back on-chain, to the people staking
-        behind it.
+        Every trade pays one. Nothing is held back by a treasury: it is converted to WETH and paid
+        out to staked $DIVS, on-chain, in four steps.
       </Lede>
 
       <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 mt-8">
@@ -468,12 +518,10 @@ function Utility() {
     <Section className="border-t border-[#1F2228] overflow-hidden">
       <GridMotif className="top-8 right-0 opacity-60 hidden lg:block" />
       <div className="relative">
-        <Title>$DIVS</Title>
+        <Title>Own the fees</Title>
         <Lede>
-          The token behind the exchange. One idea:{" "}
-          <span className="text-white font-semibold">
-            every trade pays the people staking it.
-          </span>
+          $DIVS is exposure to every trade on the exchange. Stake it and you take a share of what
+          the platform charges, paid in WETH, for as long as you stay staked.
         </Lede>
 
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-[#14161B] border border-[#232730] rounded-2xl px-4 py-3.5 mt-7 mb-6">
@@ -491,28 +539,24 @@ function Utility() {
           </button>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-3">
-          {[
+        <div className="border-t border-[#232730]">
+          {(
             [
-              "EARN",
-              "Every trade pays you",
-              "Take a cut of the fee from every buy and sell on the platform, paid in WETH.",
-            ],
-            [
-              "BOOST",
-              "Lock for a bigger share",
-              "Commit for a year and carry 4x the weight of the same stake left flexible.",
-            ],
-            [
-              "PROVIDE",
-              "Deepen the pool",
-              "Stake the LP instead for a higher pool multiplier, on top of what the pair already earns.",
-            ],
-          ].map(([tag, title, body]) => (
-            <div key={tag} className="bg-[#14161B] border border-[#232730] rounded-2xl p-5">
-              <div className="text-[10px] font-mono tracking-wider text-[#10B981] mb-3">{tag}</div>
-              <h3 className="text-white font-bold text-base mb-2 tracking-tight">{title}</h3>
-              <p className="text-[11px] leading-relaxed text-gray-400">{body}</p>
+              ["Fee share", "Every buy and sell on the exchange pays staked $DIVS, in WETH"],
+              ["Lock boost", "Lock for 52 weeks and carry 4x the weight of the same stake left flexible"],
+              ["LP staking", "Stake DIVS/WETH LP for a higher multiplier, on top of what the pair already earns"],
+              ["Emissions", "Funded $DIVS emissions accrue to stakers alongside the fee share"],
+              ["Holding alone", "Earns nothing. Only a staked position carries weight"],
+            ] as [string, string][]
+          ).map(([label, benefit]) => (
+            <div
+              key={label}
+              className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 sm:gap-6 py-5 border-b border-[#232730] last:border-0"
+            >
+              <span className="text-white font-bold text-base tracking-tight shrink-0">{label}</span>
+              <span className="text-[12px] md:text-[13px] leading-relaxed text-gray-400 sm:text-right">
+                {benefit}
+              </span>
             </div>
           ))}
         </div>
@@ -525,7 +569,7 @@ function Cta() {
   const nav = useNav();
   return (
     <Section className="border-t border-[#1F2228] text-center">
-      <Title>Start earning from the tape.</Title>
+      <Title>Trade the markets, or earn from them</Title>
       <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
         <button
           onClick={() => nav("stake")}
