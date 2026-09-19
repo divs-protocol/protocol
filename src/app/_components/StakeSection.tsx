@@ -10,7 +10,7 @@ import {
   useWriteContract,
 } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Lock, Info } from "lucide-react";
+import { Loader2, Lock, Info, Copy, Check, ExternalLink } from "lucide-react";
 import {
   STAKING_ADDRESS,
   DIVS_ADDRESS,
@@ -46,6 +46,80 @@ const fmt = (v: bigint | undefined, d = 18, places = 4) =>
   v === undefined
     ? "0"
     : Number(formatUnits(v, d)).toLocaleString(undefined, { maximumFractionDigits: places });
+
+const EXPLORER = "https://robinhoodchain.blockscout.com";
+
+/** One figure in the vault-wide panels. */
+function Tile({
+  label,
+  value,
+  unit,
+  accent,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  accent?: boolean;
+}) {
+  return (
+    <div className="bg-[#14161B] border border-[#232730] rounded-xl p-3.5">
+      <div className="text-[10px] text-gray-500 mb-1.5">{label}</div>
+      <div className={`font-mono text-lg ${accent ? "text-[#10B981]" : "text-white"}`}>{value}</div>
+      {unit && <div className="text-[10px] text-gray-600 mt-1">{unit}</div>}
+    </div>
+  );
+}
+
+/**
+ * An address with the two things anyone would want to do with one.
+ *
+ * Shown even when unset, because "not deployed yet" is information and an
+ * absent row would just look like an oversight.
+ */
+function AddressRow({ label, value }: { label: string; value?: `0x${string}` }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {
+      /* clipboard unavailable, the address is on screen to read */
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 border-b border-[#1F2228] last:border-0">
+      <span className="text-[11px] text-gray-400 w-[124px] flex-shrink-0">{label}</span>
+
+      {value ? (
+        <>
+          <span className="font-mono text-[11px] text-white truncate flex-1 min-w-0">{value}</span>
+          <button
+            onClick={copy}
+            aria-label={`Copy ${label}`}
+            className="text-gray-500 hover:text-[#10B981] transition p-1 flex-shrink-0"
+          >
+            {copied ? <Check size={13} /> : <Copy size={13} />}
+          </button>
+          <a
+            href={`${EXPLORER}/address/${value}`}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`${label} on the explorer`}
+            className="text-gray-500 hover:text-[#10B981] transition p-1 flex-shrink-0"
+          >
+            <ExternalLink size={13} />
+          </a>
+        </>
+      ) : (
+        <span className="text-[11px] text-gray-600 flex-1">Not deployed yet</span>
+      )}
+    </div>
+  );
+}
 
 function Panel({ title, children, right }: { title: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
@@ -101,6 +175,16 @@ export default function StakeSection() {
       { address: DIVS_ADDRESS, abi: erc20Abi, functionName: "balanceOf", args: [address!] },
       { address: LP_ADDRESS, abi: erc20Abi, functionName: "balanceOf", args: [address!] },
       { address: pool.token, abi: erc20Abi, functionName: "allowance", args: [address!, STAKING_ADDRESS!] },
+      // Vault-wide, not this wallet's. These describe what everyone is staked
+      // into and what is waiting to be paid out of it.
+      { address: STAKING_ADDRESS, abi: stakingAbi, functionName: "totalStakedDivs" },
+      { address: STAKING_ADDRESS, abi: stakingAbi, functionName: "emissionReserve" },
+      { address: STAKING_ADDRESS, abi: stakingAbi, functionName: "unallocatedFees" },
+      { address: STAKING_ADDRESS, abi: stakingAbi, functionName: "emissionsFunded" },
+      { address: STAKING_ADDRESS, abi: stakingAbi, functionName: "emissionsAccrued" },
+      { address: STAKING_ADDRESS, abi: stakingAbi, functionName: "periodFinish" },
+      { address: STAKING_ADDRESS, abi: stakingAbi, functionName: "pools", args: [DIVS_POOL] },
+      { address: STAKING_ADDRESS, abi: stakingAbi, functionName: "pools", args: [LP_POOL] },
     ],
     query: { enabled },
   });
@@ -119,6 +203,26 @@ export default function StakeSection() {
   const divsBal = data?.[4]?.result as bigint | undefined;
   const lpBal = data?.[5]?.result as bigint | undefined;
   const allowance = data?.[6]?.result as bigint | undefined;
+
+  const totalStaked = data?.[7]?.result as bigint | undefined;
+  const emissionReserve = data?.[8]?.result as bigint | undefined;
+  const unallocatedFees = data?.[9]?.result as bigint | undefined;
+  const emissionsFunded = data?.[10]?.result as bigint | undefined;
+  const emissionsAccrued = data?.[11]?.result as bigint | undefined;
+  const periodFinish = data?.[12]?.result as bigint | undefined;
+  const divsPool = data?.[13]?.result as readonly [string, bigint, boolean] | undefined;
+  const lpPool = data?.[14]?.result as readonly [string, bigint, boolean] | undefined;
+
+  const emissionsLeft =
+    emissionsFunded !== undefined && emissionsAccrued !== undefined
+      ? emissionsFunded - emissionsAccrued
+      : undefined;
+
+  /** Seconds until the funded emission period runs out, or zero once it has. */
+  const emissionsEndIn =
+    periodFinish !== undefined && now > 0 && Number(periodFinish) > now
+      ? Number(periodFinish) - now
+      : 0;
 
   const positions = [
     { ...POOLS[0], pos: divsPos, balance: divsBal },
@@ -531,6 +635,77 @@ export default function StakeSection() {
           </div>
         </Panel>
       )}
+
+
+      {/*
+        The vault, not the visitor. Every figure here is plain public state on
+        DivsStaking, so none of it needs an indexer and none of it is an
+        estimate. Until the contract is deployed they all read zero, which is
+        the honest number rather than a placeholder.
+      */}
+      <Panel
+        title="Network"
+        right={
+          <span className="font-mono text-[10px] text-gray-500">
+            {live ? "live from the vault" : "not deployed"}
+          </span>
+        }
+      >
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+          <Tile label="Total staked" value={fmt(totalStaked)} unit="DIVS" />
+          <Tile label="Total weight" value={fmt(totalWeight)} unit="what fees divide by" />
+          <Tile
+            label="Your share"
+            value={`${share.toFixed(2)}%`}
+            unit={myStaked > 0n ? "of total weight" : "nothing staked"}
+            accent={myStaked > 0n}
+          />
+          <Tile label="Fees waiting" value={fmt(unallocatedFees)} unit="WETH, unallocated" />
+          <Tile label="Emission reserve" value={fmt(emissionReserve)} unit="DIVS held for rewards" />
+          <Tile
+            label="Emissions left"
+            value={fmt(emissionsLeft)}
+            unit={
+              emissionsEndIn > 0
+                ? `${Math.ceil(emissionsEndIn / 86400)}d of funding left`
+                : "no period funded"
+            }
+          />
+        </div>
+      </Panel>
+
+      {/*
+        What each pool weighs, and the addresses behind all of it.
+
+        The addresses matter more than the numbers. Nowhere else on this site
+        can someone see which contract they are about to approve tokens to, and
+        "here is the address, go and check it" is the only claim a protocol can
+        make that the reader can verify for themselves.
+      */}
+      <Panel title="Pool">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4">
+          <Tile
+            label="DIVS pool"
+            // The owner can change a pool multiplier, so an unreadable one is
+            // unknown rather than the value it was deployed with.
+            value={divsPool ? `${(Number(divsPool[1]) / 10_000).toFixed(2)}x` : "—"}
+            unit="pool multiplier"
+          />
+          <Tile
+            label="LP pool"
+            value={lpPool ? `${(Number(lpPool[1]) / 10_000).toFixed(2)}x` : "—"}
+            unit="pool multiplier"
+          />
+          <Tile label="Max lock" value={`${MAX_LOCK_WEEKS}w`} unit="one year" />
+          <Tile label="Max boost" value="4.00x" unit="at the full lock" accent />
+        </div>
+
+        <div className="border-t border-[#232730]">
+          <AddressRow label="Staking contract" value={STAKING_ADDRESS} />
+          <AddressRow label="Staked token" value={DIVS_ADDRESS} />
+          <AddressRow label="LP token" value={LP_ADDRESS} />
+        </div>
+      </Panel>
 
       <Footer />
     </div>

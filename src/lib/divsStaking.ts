@@ -126,6 +126,28 @@ export const stakingAbi = [
     inputs: [],
     outputs: [{ type: "uint256" }],
   },
+  /*
+   * Protocol-wide figures, for the panels that describe the vault rather than
+   * one person's position in it. All are plain public state on DivsStaking, so
+   * none of this needs an indexer.
+   */
+  { type: "function", name: "emissionReserve", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "unallocatedFees", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "emissionsFunded", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "emissionsAccrued", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "emissionRate", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "poolCount", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  {
+    type: "function",
+    name: "pools",
+    stateMutability: "view",
+    inputs: [{ name: "poolId", type: "uint256" }],
+    outputs: [
+      { name: "token", type: "address" },
+      { name: "multiplierBps", type: "uint256" },
+      { name: "exists", type: "bool" },
+    ],
+  },
 ] as const;
 
 export const erc20Abi = [
