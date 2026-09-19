@@ -14,7 +14,7 @@ import {
   SLIPPAGE_OPTIONS,
   useRouterTrade,
 } from "@/lib/divsRouter";
-import { useConnectWallet } from "./wallet";
+import { useConnectWallet, useWalletStatus } from "./wallet";
 import Footer from "./Footer";
 
 /**
@@ -178,6 +178,7 @@ function Panel({
 
 export default function ExchangeTerminal({ initialTicker, onBack }: { initialTicker?: string; onBack?: () => void }) {
   const { address, isConnected } = useAccount();
+  const { settling } = useWalletStatus();
   const { priced, ethUsd, isLoading } = usePrices();
 
   const [ticker, setTicker] = useState(initialTicker ?? MARKETS[0].ticker);
@@ -513,7 +514,9 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
               }`}
             >
               {!isConnected
-                ? "Connect wallet"
+                ? settling
+                  ? "Connecting…"
+                  : "Connect wallet"
                 : (trade.label ?? `${side === "buy" ? "Buy" : "Sell"} ${active.market.ticker}`)}
             </button>
 

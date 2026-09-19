@@ -61,9 +61,15 @@ export const wagmiAdapter = new WagmiAdapter({
     ? { [robinhood.id]: robinhoodTransport, [hardhat.id]: http(localRpcUrl) }
     : { [robinhood.id]: robinhoodTransport },
   /**
-   * Cookie storage so the server render and the first client render agree on
-   * the connection state, rather than the app flashing disconnected and then
-   * correcting itself after hydration.
+   * The session is kept in a cookie rather than localStorage so that it is
+   * readable on the server.
+   *
+   * Nothing reads it there yet. Making the first server render already know the
+   * connection means calling `cookieToInitialState` in the root layout and
+   * handing the result to WagmiProvider, and reading headers there opts every
+   * page out of static rendering. Until that trade is worth making, the client
+   * restores the session itself on mount and the interface reports
+   * "Connecting…" while it does, rather than claiming nobody is connected.
    */
   ssr: true,
   storage: createStorage({ storage: cookieStorage }),

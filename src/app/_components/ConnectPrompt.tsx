@@ -1,8 +1,7 @@
 "use client";
 
-import { useAccount } from "wagmi";
 import { Wallet } from "lucide-react";
-import { useConnectWallet } from "./wallet";
+import { useConnectWallet, useWalletStatus } from "./wallet";
 
 /**
  * Stand-in for any view that describes the viewer's own position.
@@ -12,10 +11,11 @@ import { useConnectWallet } from "./wallet";
  * balances that read as theirs. These sections now show this instead.
  */
 export default function ConnectPrompt({ what }: { what: string }) {
-  const { isConnected } = useAccount();
+  const { isConnected, settling } = useWalletStatus();
   const openWallet = useConnectWallet();
 
-  if (isConnected) return null;
+  // Nothing to prompt for while a connection is already in flight.
+  if (isConnected || settling) return null;
 
   return (
     <div className="flex flex-col items-center justify-center text-center bg-[#1B1E24] border border-[#232730] rounded-2xl p-10 min-h-[380px]">

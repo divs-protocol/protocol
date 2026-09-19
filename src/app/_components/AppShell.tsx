@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAccount, useDisconnect } from "wagmi";
+import { useDisconnect } from "wagmi";
 import { 
   BarChart2, Layers, Wallet, ClipboardList, User, 
   Headphones, Settings, BookOpen, 
@@ -28,7 +28,7 @@ import ExchangeSection from "./ExchangeSection";
 import StakeSection from "./StakeSection";
 import { PortfolioView, ActivityView, AccountView, SettingsView } from "./SidebarViews";
 import SupportWidget from "./SupportWidget";
-import { useConnectWallet } from "./wallet";
+import { useConnectWallet, useWalletStatus } from "./wallet";
 import Footer from "./Footer";
 import { NavContext } from "./nav";
 
@@ -184,7 +184,7 @@ export default function AppShell({ section }: { section: string }) {
 
   const [supportOpen, setSupportOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, settling } = useWalletStatus();
   const openWallet = useConnectWallet();
   const { disconnect } = useDisconnect();
   /*
@@ -422,12 +422,19 @@ export default function AppShell({ section }: { section: string }) {
                   {address?.slice(0, 6)}...{address?.slice(-4)}
                 </button>
               ) : (
-                <button 
+                <button
                   onClick={openWallet}
-                  className="px-3 sm:px-4 py-1.5 bg-[#10B981] text-black font-bold rounded-xl whitespace-nowrap hover:bg-[#0EA5E9] transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-busy={settling}
+                  className="px-3 sm:px-4 py-1.5 bg-[#10B981] text-black font-bold rounded-xl whitespace-nowrap hover:bg-[#0EA5E9] transition"
                 >
-                  <span className="sm:hidden">Connect</span>
-                  <span className="hidden sm:inline">Connect Wallet</span>
+                  {settling ? (
+                    <span>Connecting…</span>
+                  ) : (
+                    <>
+                      <span className="sm:hidden">Connect</span>
+                      <span className="hidden sm:inline">Connect Wallet</span>
+                    </>
+                  )}
                 </button>
               )}
 
@@ -708,7 +715,9 @@ export default function AppShell({ section }: { section: string }) {
                         }`}
                       >
                         {!isConnected
-                          ? "Connect Wallet"
+                          ? settling
+                            ? "Connecting…"
+                            : "Connect Wallet"
                           : (trade.label ??
                             `${side === "buy" ? "Buy" : "Sell"} ${selected?.ticker ?? ""}`)}
                       </button>

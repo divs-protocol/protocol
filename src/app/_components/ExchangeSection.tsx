@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useAccount } from "wagmi";
-import { useConnectWallet } from "./wallet";
+import { useConnectWallet, useWalletStatus } from "./wallet";
 import {
   ArrowRight,
   Plus,
@@ -120,6 +120,7 @@ function Hero({
   onTrade: (t: string) => void;
 }) {
   const { isConnected } = useAccount();
+  const { settling } = useWalletStatus();
   const openWallet = useConnectWallet();
 
   const featured = priced.find((p) => p.market.ticker === "AAPL") ?? priced[0];
@@ -161,9 +162,10 @@ function Hero({
             ) : (
               <button
                 onClick={openWallet}
+                aria-busy={settling}
                 className="bg-[#10B981] hover:bg-[#0EA372] text-black font-bold text-[13px] px-6 py-3.5 rounded-xl transition"
               >
-                Connect wallet
+                {settling ? "Connecting…" : "Connect wallet"}
               </button>
             )}
             <button
