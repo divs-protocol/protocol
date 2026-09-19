@@ -102,6 +102,7 @@ export default function MarketsHero({
 
           <h1 className="text-white font-bold tracking-tight text-3xl md:text-5xl leading-[1.06] mb-5">
             Every stock you can
+            {" "}
             <br className="hidden md:inline" />
             trade here.
           </h1>

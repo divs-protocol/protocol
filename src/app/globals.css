@@ -1,1 +1,19 @@
 @import "tailwindcss";
+
+/*
+ * The wallet sheet on a phone.
+ *
+ * AppKit pins its connect sheet to the bottom of a fixed, full-viewport host
+ * and uses no safe-area insets of its own, so on iOS the bottom of the card is
+ * cut off by the home indicator and Safari's toolbar. Padding the host moves
+ * the flex container the card bottom-aligns to, which lifts the whole sheet
+ * clear without touching anything inside AppKit's shadow DOM.
+ *
+ * The host element is in the light DOM, so it is reachable from here. Its
+ * contents are not.
+ */
+@media (max-width: 430px) {
+  w3m-modal {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}

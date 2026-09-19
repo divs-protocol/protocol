@@ -105,6 +105,7 @@ export default function TradeHero({
 
           <h1 className="text-white font-bold tracking-tight text-3xl md:text-5xl leading-[1.06] mb-5">
             Buy and sell,
+            {" "}
             <br className="hidden md:inline" />
             any hour of any day.
           </h1>

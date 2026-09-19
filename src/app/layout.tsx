@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Providers from "./providers";
 import { SITE_URL } from "@/lib/wagmi";
@@ -33,6 +33,19 @@ export const metadata: Metadata = {
     description,
     images: ["/logo-card.png"],
   },
+};
+
+/**
+ * `viewportFit: "cover"` is what makes `env(safe-area-inset-*)` resolve to a
+ * real number on iOS. Without it every inset reads as zero, and anything
+ * pinned to the bottom of the screen sits under the home indicator and the
+ * browser toolbar. Next's default viewport tag does not set it.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0B0C0E",
 };
 
 export default function RootLayout({

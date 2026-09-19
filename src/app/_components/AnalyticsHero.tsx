@@ -184,6 +184,7 @@ export default function AnalyticsHero({
 
           <h1 className="text-white font-bold tracking-tight text-3xl md:text-5xl leading-[1.06] mb-5">
             What the market
+            {" "}
             <br className="hidden md:inline" />
             is doing right now.
           </h1>

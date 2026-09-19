@@ -99,7 +99,12 @@ function MobileMenu({
   };
 
   return (
-    <div className="md:hidden fixed inset-0 z-50" role="dialog" aria-label="Menu">
+    <div
+      className="md:hidden fixed inset-0 z-50"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+      role="dialog"
+      aria-label="Menu"
+    >
       <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden />
 
       <aside className="absolute inset-y-0 left-0 w-[82%] max-w-[320px] bg-[#111317] border-r border-[#1F2228] flex flex-col">
@@ -447,6 +452,11 @@ export default function AppShell({ section }: { section: string }) {
           <div
             className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-none bg-[#0B0C0E]"
             style={{
+              // The viewport is declared viewport-fit=cover so the wallet sheet
+              // can clear the home indicator. That lets this scroll area run
+              // under it too, so the last row of a long page needs the inset
+              // added back.
+              paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))",
               backgroundImage:
                 "radial-gradient(circle, rgba(255,255,255,0.085) 1px, transparent 1px)",
               backgroundSize: "32px 32px",
