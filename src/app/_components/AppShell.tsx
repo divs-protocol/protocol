@@ -7,12 +7,13 @@ import { useDisconnect } from "wagmi";
 import { 
   BarChart2, Layers, Wallet, ClipboardList, User, 
   Headphones, Settings, BookOpen, 
-  Search, Bell, ArrowUpRight, ArrowDownRight, ChevronDown,
+  Search, ArrowUpRight, ArrowDownRight, ChevronDown,
   Menu, X as Close, Copy, Check, LogOut, ExternalLink
 } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
 import DocsSection from "./DocsSection";
 import LandingSection from "./LandingSection";
+import AlertsBell from "./AlertsBell";
 import MarketsSection from "./MarketsSection";
 import { compact, num, usd, useDepth, useLiveMarkets, useMarketHistory } from "@/lib/live";
 import {
@@ -530,9 +531,9 @@ export default function AppShell({ section }: { section: string }) {
 
             {/* Top Right User Controls */}
             <div className="flex items-center space-x-3">
-              <button className="hidden sm:block p-2 bg-[#1B1E24] border border-[#232730] rounded-xl text-gray-400 hover:text-white">
-                <Bell size={15} />
-              </button>
+              <div className="hidden sm:block">
+                <AlertsBell />
+              </div>
               
               {isConnected && address ? (
                 <AccountMenu address={address} />
