@@ -47,16 +47,6 @@ const fmt = (v: bigint | undefined, d = 18, places = 4) =>
     ? "0"
     : Number(formatUnits(v, d)).toLocaleString(undefined, { maximumFractionDigits: places });
 
-function Stat({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: boolean }) {
-  return (
-    <div className="bg-[#14161B] border border-[#232730] rounded-2xl p-4">
-      <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1.5">{label}</div>
-      <div className={`font-mono text-xl ${accent ? "text-[#10B981]" : "text-white"}`}>{value}</div>
-      {sub && <div className="text-[10px] text-gray-600 mt-1">{sub}</div>}
-    </div>
-  );
-}
-
 function Panel({ title, children, right }: { title: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div className="bg-[#1B1E24] border border-[#232730] rounded-2xl">
@@ -82,7 +72,7 @@ export default function StakeSection() {
    * take out part of it. The contract has always accepted an amount; only the
    * interface insisted on all of it.
    */
-  const [mode, setMode] = useState<"stake" | "withdraw">("stake");
+  const [mode, setMode] = useState<"stake" | "withdraw" | null>(null);
   // Wall clock lives in state so render stays pure and the server, which has a
   // different clock, does not disagree with the first client paint.
   const [now, setNow] = useState(0);
@@ -213,11 +203,15 @@ export default function StakeSection() {
       args: [pool.id, parsed],
     });
 
-  /** Sends the form to withdraw for one pool, filled with the whole position. */
-  const openWithdraw = (key: "divs" | "lp", staked: bigint) => {
-    setMode("withdraw");
-    setPoolKey(key);
-    setAmount(staked > 0n ? formatUnits(staked, 18) : "");
+  const openForm = (next: "stake" | "withdraw") => {
+    setMode(next);
+    setAmount("");
+    reset();
+  };
+
+  const closeForm = () => {
+    setMode(null);
+    setAmount("");
     reset();
   };
 
@@ -258,143 +252,104 @@ export default function StakeSection() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Your stake" value={fmt(myStaked)} sub="DIVS + LP" />
-        <Stat label="Your weight" value={fmt(myWeight)} sub={`${share.toFixed(2)}% of pool`} />
+      {/*
+        One card, the way DARK does it: what you have, what you can collect,
+        and the two things you can do. The detail that makes DIVS different,
+        two pools and a lock that earns weight, belongs inside the action and
+        not in front of someone who has not chosen one yet.
+      */}
+      <div className="bg-[#14161B] border border-[#232730] rounded-2xl p-5">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <span className="text-[13px] font-semibold text-white">Your position</span>
+          <span className="text-[11px] text-gray-500">
+            {myStaked > 0n ? `${share.toFixed(2)}% of total weight` : "Nothing staked yet"}
+          </span>
+        </div>
 
-        {/*
-          Claim sits beside the figure it acts on. It used to be a small button
-          in another panel's header, two panels away from the numbers telling
-          you there was anything to collect.
-        */}
-        <div className="col-span-2 bg-[#14161B] border border-[#232730] rounded-2xl p-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-8 min-w-0">
-            <div>
-              <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1.5">
-                Claimable fees
-              </div>
-              <div className="font-mono text-xl text-[#10B981]">{fmt(rewards?.[0])}</div>
-              <div className="text-[10px] text-gray-600 mt-1">WETH</div>
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1.5">
-                Emissions
-              </div>
-              <div className="font-mono text-xl text-white">{fmt(rewards?.[1])}</div>
-              <div className="text-[10px] text-gray-600 mt-1">DIVS</div>
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+          <div className="bg-[#1B1E24] border border-[#232730] rounded-xl p-4">
+            <div className="text-[11px] text-gray-500 mb-1.5">Staked</div>
+            <div className="font-mono text-2xl text-white">{fmt(myStaked)}</div>
+            <div className="text-[10px] text-gray-600 mt-1">DIVS and LP</div>
           </div>
 
+          <div className="bg-[#1B1E24] border border-[#232730] rounded-xl p-4">
+            <div className="text-[11px] text-gray-500 mb-1.5">Share of pool</div>
+            <div className="font-mono text-2xl text-white">{share.toFixed(2)}%</div>
+            <div className="text-[10px] text-gray-600 mt-1">{fmt(myWeight)} weight</div>
+          </div>
+
+          <div className="bg-[#1B1E24] border border-[#232730] rounded-xl p-4 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[11px] text-gray-500 mb-1.5">Claimable</div>
+              <div className="font-mono text-2xl text-[#10B981]">{fmt(rewards?.[0])}</div>
+              <div className="text-[10px] text-gray-600 mt-1">
+                WETH{(rewards?.[1] ?? 0n) > 0n ? ` and ${fmt(rewards?.[1])} DIVS` : ""}
+              </div>
+            </div>
+            <button
+              onClick={doClaim}
+              disabled={!live || busy || !hasRewards}
+              title={hasRewards ? undefined : "Nothing to claim yet"}
+              className="flex items-center gap-1.5 bg-[#10B981] hover:bg-[#0EA372] disabled:opacity-25 disabled:cursor-not-allowed text-black text-[11px] font-bold px-4 py-2 rounded-lg transition flex-shrink-0"
+            >
+              {busy && <Loader2 size={12} className="animate-spin" />}
+              Claim
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
           <button
-            onClick={doClaim}
-            disabled={!live || busy || !hasRewards}
-            title={hasRewards ? undefined : "Nothing to claim yet"}
-            className="flex items-center gap-1.5 bg-[#10B981] hover:bg-[#0EA372] disabled:opacity-30 disabled:cursor-not-allowed text-black text-[11px] font-bold px-4 py-2.5 rounded-xl transition flex-shrink-0"
+            onClick={() => openForm("stake")}
+            disabled={!live}
+            className="px-7 py-3 rounded-xl text-[13px] font-bold transition disabled:opacity-30 disabled:cursor-not-allowed bg-[#10B981] hover:bg-[#0EA372] text-black"
           >
-            {busy && <Loader2 size={12} className="animate-spin" />}
-            Claim
+            Stake
+          </button>
+          <button
+            onClick={() => openForm("withdraw")}
+            disabled={!live || myStaked === 0n}
+            title={myStaked === 0n ? "Nothing staked to withdraw" : undefined}
+            className="px-7 py-3 rounded-xl text-[13px] font-bold transition disabled:opacity-30 disabled:cursor-not-allowed bg-[#232730] hover:bg-[#2C313B] text-white"
+          >
+            Withdraw
           </button>
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-[1fr_340px] gap-3 items-start">
-        {/* positions */}
-        <Panel
-          title="Your positions"
-          right={
-            <span className="text-[10px] text-gray-500">
-              {myStaked > 0n ? `${share.toFixed(2)}% of total weight` : "Nothing staked yet"}
-            </span>
-          }
-        >
-          <div className="divide-y divide-[#1F2228]">
-            {positions.map((p) => {
-              const amt = p.pos?.[0] ?? 0n;
-              const w = p.pos?.[1] ?? 0n;
-              const lockEnd = Number(p.pos?.[2] ?? 0n);
-              const locked = now > 0 && lockEnd > now;
-              const daysLeft = locked ? Math.ceil((lockEnd - now) / 86400) : 0;
-
-              return (
-                <div key={p.key} className="p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[12px] text-white font-semibold">{p.label}</div>
-                      <div className="text-[10px] text-gray-500">{p.note}</div>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-right">
-                        <div className="text-[9px] uppercase tracking-wide text-gray-500">Staked</div>
-                        <div className="font-mono text-[12px] text-white">{fmt(amt)}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-[9px] uppercase tracking-wide text-gray-500">Weight</div>
-                        <div className="font-mono text-[12px] text-[#10B981]">{fmt(w)}</div>
-                      </div>
-                      <div className="text-right min-w-[70px]">
-                        <div className="text-[9px] uppercase tracking-wide text-gray-500">Lock</div>
-                        <div className="font-mono text-[12px] text-gray-300 flex items-center gap-1 justify-end">
-                          {locked && <Lock size={9} className="text-amber-400" />}
-                          {amt === 0n ? "-" : locked ? `${daysLeft}d` : "flexible"}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => openWithdraw(p.key, amt)}
-                        disabled={!live || amt === 0n || locked}
-                        title={locked ? `Locked for ${daysLeft} more days` : undefined}
-                        className="bg-[#232730] hover:bg-[#2C313B] disabled:opacity-30 disabled:cursor-not-allowed text-white text-[10px] font-semibold px-3 py-1.5 rounded-lg transition"
-                      >
-                        Withdraw
-                      </button>
-                    </div>
-                  </div>
-                  {amt === 0n && (
-                    <p className="text-[10px] text-gray-600 mt-2">
-                      No position in this pool.
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </Panel>
-
-        {/* stake and withdraw, one form with two sides */}
+      {/* The form exists only once one of those two has been chosen. */}
+      {mode && (
         <Panel
           title={mode === "stake" ? "Stake" : "Withdraw"}
           right={
-            <div className="flex items-center gap-1 bg-[#14161B] border border-[#232730] rounded-lg p-0.5">
-              {(["stake", "withdraw"] as const).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => {
-                    setMode(m);
-                    setAmount("");
-                    reset();
-                  }}
-                  className={`px-2.5 py-1 rounded-md text-[10px] font-bold capitalize transition ${
-                    mode === m ? "bg-[#10B981] text-black" : "text-gray-400 hover:text-white"
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
+            <button
+              onClick={closeForm}
+              className="text-[10px] text-gray-500 hover:text-white transition"
+            >
+              Close
+            </button>
           }
         >
-          <div className="p-4 space-y-4">
-            <div className="grid grid-cols-2 gap-1.5 bg-[#14161B] border border-[#232730] rounded-xl p-1">
-              {POOLS.map((p) => (
-                <button
-                  key={p.key}
-                  onClick={() => setPoolKey(p.key)}
-                  className={`py-2 rounded-lg text-[10px] font-bold transition ${
-                    poolKey === p.key ? "bg-[#10B981] text-black" : "text-gray-400 hover:text-white"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
+          <div className="p-4 space-y-4 max-w-md">
+            <div>
+              <div className="text-[10px] text-gray-500 mb-1.5">Pool</div>
+              <div className="grid grid-cols-2 gap-1.5 bg-[#14161B] border border-[#232730] rounded-xl p-1">
+                {POOLS.map((pl) => (
+                  <button
+                    key={pl.key}
+                    onClick={() => {
+                      setPoolKey(pl.key);
+                      setAmount("");
+                    }}
+                    className={`py-2 rounded-lg text-[10px] font-bold transition ${
+                      poolKey === pl.key ? "bg-[#10B981] text-black" : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    {pl.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div>
@@ -415,48 +370,50 @@ export default function StakeSection() {
                   inputMode="decimal"
                   className="bg-transparent text-white font-mono text-lg w-full outline-none placeholder:text-gray-600"
                 />
-                <span className="text-[10px] text-gray-500 font-semibold flex-shrink-0">{pool.label}</span>
+                <span className="text-[10px] text-gray-500 font-semibold flex-shrink-0">
+                  {pool.label}
+                </span>
               </div>
             </div>
 
             {mode === "stake" && (
-            <>
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[10px] text-gray-500">Lock</label>
-                <span className="font-mono text-[10px] text-gray-400">
-                  {weeks === 0 ? "flexible" : `${weeks} weeks`}
-                </span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={MAX_LOCK_WEEKS}
-                value={weeks}
-                onChange={(e) => setWeeks(Number(e.target.value))}
-                aria-label="Lock duration in weeks"
-                className="w-full accent-[#10B981] cursor-pointer"
-              />
-              <div className="flex justify-between mt-1 text-[9px] text-gray-600 font-mono">
-                <span>0</span>
-                <span>26</span>
-                <span>52</span>
-              </div>
-            </div>
+              <>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[10px] text-gray-500">Lock</label>
+                    <span className="font-mono text-[10px] text-gray-400">
+                      {weeks === 0 ? "flexible" : `${weeks} weeks`}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={MAX_LOCK_WEEKS}
+                    value={weeks}
+                    onChange={(e) => setWeeks(Number(e.target.value))}
+                    aria-label="Lock duration in weeks"
+                    className="w-full accent-[#10B981] cursor-pointer"
+                  />
+                  <div className="flex justify-between mt-1 text-[9px] text-gray-600 font-mono">
+                    <span>0</span>
+                    <span>26</span>
+                    <span>52</span>
+                  </div>
+                </div>
 
-            <div className="bg-[#14161B] border border-[#232730] rounded-xl p-3 space-y-2">
-              <div className="flex justify-between text-[11px]">
-                <span className="text-gray-500">Lock multiplier</span>
-                <span className="font-mono text-[#10B981]">{multiplier.toFixed(4)}x</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-gray-500">Weight earned</span>
-                <span className="font-mono text-white">
-                  {previewWeight.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
-            </>
+                <div className="bg-[#14161B] border border-[#232730] rounded-xl p-3 space-y-2">
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-gray-500">Lock multiplier</span>
+                    <span className="font-mono text-[#10B981]">{multiplier.toFixed(4)}x</span>
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-gray-500">Weight earned</span>
+                    <span className="font-mono text-white">
+                      {previewWeight.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              </>
             )}
 
             {mode === "withdraw" && (
@@ -475,7 +432,7 @@ export default function StakeSection() {
                   <p className="flex items-start gap-1.5 text-[10px] text-amber-400 leading-relaxed pt-1">
                     <Lock size={10} className="mt-0.5 flex-shrink-0" />
                     Locked for {lockDaysLeft} more {lockDaysLeft === 1 ? "day" : "days"}. A lock
-                    cannot be shortened, so nothing can be withdrawn until it ends.
+                    cannot be shortened, so nothing comes out until it ends.
                   </p>
                 )}
               </div>
@@ -490,6 +447,14 @@ export default function StakeSection() {
               </p>
             )}
 
+            {parsed > (balance ?? 0n) && (
+              <p className="text-[10px] text-amber-400">
+                {mode === "stake"
+                  ? "More than the wallet holds."
+                  : "More than is staked in this pool."}
+              </p>
+            )}
+
             <button
               onClick={mode === "withdraw" ? doWithdraw : needsApproval ? approve : doStake}
               disabled={
@@ -499,8 +464,7 @@ export default function StakeSection() {
                 parsed > (balance ?? 0n) ||
                 (mode === "withdraw" && lockedHere)
               }
-              title={live ? undefined : "Staking contract not deployed"}
-              className={`w-full flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed py-3 rounded-xl text-[11px] font-bold transition ${
+              className={`w-full flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed py-3 rounded-xl text-[12px] font-bold transition ${
                 mode === "withdraw"
                   ? "bg-[#232730] hover:bg-[#2C313B] text-white"
                   : "bg-[#10B981] hover:bg-[#0EA372] text-black"
@@ -508,30 +472,65 @@ export default function StakeSection() {
             >
               {busy && <Loader2 size={12} className="animate-spin" />}
               {mode === "withdraw"
-                ? parsed > 0n && parsed >= stakedHere
-                  ? `Withdraw all ${pool.label}`
-                  : `Withdraw ${pool.label}`
+                ? `Withdraw ${pool.label}`
                 : needsApproval
                   ? `Approve ${pool.label}`
-                  : "Stake"}
+                  : `Stake ${pool.label}`}
             </button>
-
-            {parsed > (balance ?? 0n) && (
-              <p className="text-[10px] text-amber-400">
-                {mode === "stake"
-                  ? "More than the wallet holds."
-                  : "More than is staked in this pool."}
-              </p>
-            )}
 
             <p className="text-[10px] leading-relaxed text-gray-600">
               {mode === "stake"
-                ? "A lock cannot be shortened. Rewards keep accruing while locked and claiming never touches your principal."
-                : "Withdrawing takes only the amount entered. Rewards stay claimable and are not touched by this."}
+                ? "A lock cannot be shortened. Rewards keep accruing while locked, and claiming never touches your principal."
+                : "Only the amount entered comes out. Rewards stay claimable and are not touched by this."}
             </p>
           </div>
         </Panel>
-      </div>
+      )}
+
+      {/* The per-pool breakdown, for anyone who wants it. */}
+      {myStaked > 0n && (
+        <Panel title="By pool">
+          <div className="divide-y divide-[#1F2228]">
+            {positions.map((pl) => {
+              const amt = pl.pos?.[0] ?? 0n;
+              const w = pl.pos?.[1] ?? 0n;
+              const lockEnd = Number(pl.pos?.[2] ?? 0n);
+              const locked = now > 0 && lockEnd > now;
+              const daysLeft = locked ? Math.ceil((lockEnd - now) / 86400) : 0;
+              if (amt === 0n) return null;
+
+              return (
+                <div
+                  key={pl.key}
+                  className="px-4 py-3 flex flex-wrap items-center justify-between gap-3"
+                >
+                  <div>
+                    <div className="text-[12px] text-white font-semibold">{pl.label}</div>
+                    <div className="text-[10px] text-gray-500">{pl.note}</div>
+                  </div>
+                  <div className="flex items-center gap-6">
+                    <div className="text-right">
+                      <div className="text-[9px] uppercase tracking-wide text-gray-500">Staked</div>
+                      <div className="font-mono text-[12px] text-white">{fmt(amt)}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[9px] uppercase tracking-wide text-gray-500">Weight</div>
+                      <div className="font-mono text-[12px] text-[#10B981]">{fmt(w)}</div>
+                    </div>
+                    <div className="text-right min-w-[64px]">
+                      <div className="text-[9px] uppercase tracking-wide text-gray-500">Lock</div>
+                      <div className="font-mono text-[12px] text-gray-300 flex items-center gap-1 justify-end">
+                        {locked && <Lock size={9} className="text-amber-400" />}
+                        {locked ? `${daysLeft}d` : "flexible"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+      )}
 
       <Footer />
     </div>
