@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { findMarket, usdPerShare, quoteToUsd } from "@/lib/exchange";
+import { findMarket, poolAbi, usdPerShare, quoteToUsd } from "@/lib/exchange";
 import { cached, client, getSwapLogs, readEthUsd, spanLabel, type SwapLog } from "@/lib/chain";
 
 /**
@@ -21,6 +21,22 @@ const SPANS: Record<string, bigint> = {
   "12h": 425_000n,
 };
 
+/**
+ * The lookback widens when a market is too quiet to fill the window asked for.
+ *
+ * Blocks are a tenth of a second, so an hour is a narrow slice of history and
+ * most of the listed set does not trade in one. HIMS had no swaps at all in
+ * three hours and fifty in twelve; charted over the requested hour it drew
+ * nothing, which reads as a broken market rather than a quiet one.
+ *
+ * The response reports the span it actually measured, so the axis never claims
+ * a range it did not read.
+ */
+const LADDER = [18_000n, 35_000n, 106_000n, 425_000n, 1_300_000n];
+
+/** Below this a line is not a chart, so the search widens instead. */
+const MIN_SWAPS = 8;
+
 const CANDLES = 80;
 const MAX_TRADES = 150;
 const TTL_MS = 15_000;
@@ -40,6 +56,8 @@ export type MarketDetail = {
   candles: { t: number; price: number }[];
   trades: Trade[];
   window: string;
+  quotedOnly?: boolean;
+  widened?: boolean;
   txns: number;
   buys: number;
   sells: number;
@@ -51,15 +69,29 @@ async function load(ticker: string, span: string): Promise<MarketDetail> {
   const m = findMarket(ticker);
   if (!m) throw new Error(`Unknown market ${ticker}`);
 
-  const blocks = SPANS[span] ?? SPANS["1h"];
   const head = await client.getBlockNumber();
-  const from = head > blocks ? head - blocks : 0n;
 
-  // Only the ETH price is needed here; reading all seventeen pools again just
-  // to get it doubled the cost of opening a market.
-  const [ethUsd, logs, headBlock, fromBlock] = await Promise.all([
+  // Widen until there is enough to draw, starting at the span asked for. A
+  // quiet market otherwise returns one point or none, and a chart of one point
+  // is a blank panel.
+  const requested = SPANS[span] ?? SPANS["1h"];
+  const asked = Math.max(0, LADDER.indexOf(requested));
+  let rung = asked;
+  let from = 0n;
+  let logs: SwapLog[] = [];
+
+  for (;;) {
+    const blocks = LADDER[rung];
+    from = head > blocks ? head - blocks : 0n;
+    logs = await getSwapLogs([m.pool], from, head);
+    if (logs.length >= MIN_SWAPS || rung >= LADDER.length - 1 || from === 0n) break;
+    rung += 1;
+  }
+
+  // Only the ETH price is needed here; reading all ninety-eight pools again
+  // just to get it doubled the cost of opening a market.
+  const [ethUsd, headBlock, fromBlock] = await Promise.all([
     cached("ethUsd", 15_000, readEthUsd),
-    getSwapLogs([m.pool], from, head),
     client.getBlock({ blockNumber: head }),
     client.getBlock({ blockNumber: from }),
   ]);
@@ -113,9 +145,38 @@ async function load(ticker: string, span: string): Promise<MarketDetail> {
     });
   }
 
+  const candles = [...closes.entries()].sort((a, b) => a[0] - b[0]).map(([, c]) => c);
+
+  /*
+   * A market that has never traded inside the widest window still has a price:
+   * the pool's current tick. Drawing it flat says "quoted, not yet traded",
+   * which is the truth. An empty panel says the market is broken, which is not.
+   */
+  // Set when the line drawn is the quote rather than a history, which is not
+  // the same as "no swaps": a single swap also leaves too little to plot.
+  let quotedOnly = false;
+
+  if (candles.length < 2) {
+    quotedOnly = true;
+    const slot0 = (await client.readContract({
+      address: m.pool,
+      abi: poolAbi,
+      functionName: "slot0",
+    })) as readonly [bigint, ...unknown[]];
+
+    const price = usdPerShare(m, slot0[0], ethUsd);
+    const end = Number(headBlock.timestamp);
+    candles.length = 0;
+    candles.push({ t: end - seconds, price }, { t: end, price });
+  }
+
   return {
     ticker: m.ticker,
-    candles: [...closes.entries()].sort((a, b) => a[0] - b[0]).map(([, c]) => c),
+    candles,
+    /** True when the line is the current quote rather than a traded history. */
+    quotedOnly,
+    /** True when the lookback had to reach past the span that was asked for. */
+    widened: rung > asked,
     // Newest first, capped - a tape nobody scrolls past 150 rows of.
     trades: trades.reverse().slice(0, MAX_TRADES),
     window: spanLabel(seconds),

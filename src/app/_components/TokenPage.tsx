@@ -128,6 +128,8 @@ export default function TokenPage({
     trades,
     candles,
     window: win,
+    quotedOnly,
+    widened,
     buys,
     sells,
     buyVolume,
@@ -252,7 +254,14 @@ export default function TokenPage({
         {/* chart */}
         <div className="bg-[#1B1E24] border border-[#232730] rounded-2xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[11px] font-semibold text-white">Price</span>
+            <span className="flex items-baseline gap-2 min-w-0">
+              <span className="text-[11px] font-semibold text-white">Price</span>
+              {/* A quiet market widens its own lookback, so the label states the
+                  range actually read rather than the one selected. */}
+              <span className="font-mono text-[9px] text-gray-600 truncate">
+                {quotedOnly ? "quoted, no trades in range" : widened ? `showing ${win}` : null}
+              </span>
+            </span>
             <div className="flex items-center gap-1">
               {HISTORY_SPANS.map((s) => (
                 <button

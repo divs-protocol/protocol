@@ -205,6 +205,10 @@ type MarketDetail = {
   candles: Candle[];
   trades: Trade[];
   window: string;
+  /** True when the line is the current quote rather than a traded history. */
+  quotedOnly?: boolean;
+  /** True when the lookback reached past the span that was asked for. */
+  widened?: boolean;
   txns: number;
   buys: number;
   sells: number;

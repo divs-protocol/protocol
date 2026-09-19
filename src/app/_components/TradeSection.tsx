@@ -116,11 +116,15 @@ function MarketList({
                 <div className="text-[9px] text-gray-500 truncate">{m.name}</div>
               </div>
               <div className="text-right flex-shrink-0 ml-2">
-                <div className="font-mono text-[10px] text-gray-300">{usd(m.price)}</div>
-                <div className={`font-mono text-[9px] ${up ? "text-[#10B981]" : "text-red-400"}`}>
-                  {up ? "+" : ""}
-                  {m.change.toFixed(2)}%
+                <div className={`font-mono text-[10px] ${m.tvl < EMPTY_POOL_USD ? "text-gray-600" : "text-gray-300"}`}>
+                  {priceLabel(m)}
                 </div>
+                {m.tvl >= EMPTY_POOL_USD && (
+                  <div className={`font-mono text-[9px] ${up ? "text-[#10B981]" : "text-red-400"}`}>
+                    {up ? "+" : ""}
+                    {m.change.toFixed(2)}%
+                  </div>
+                )}
               </div>
             </button>
           );
@@ -337,17 +341,37 @@ function OrderEntry({ market }: { market: LiveMarket }) {
   );
 }
 
+/**
+ * A pool that holds nothing has no price worth printing.
+ *
+ * Liquidity can be pulled after a market is listed, and the tick left behind is
+ * whatever the last trade pushed it to. Twelve of the listed pools are empty
+ * right now, and one of them reports 7.7e-36 a share, which renders as $0.00
+ * and reads as a broken feed rather than an empty book.
+ */
+const EMPTY_POOL_USD = 1;
+const priceLabel = (m: LiveMarket) => (m.tvl < EMPTY_POOL_USD ? "no liquidity" : usd(m.price));
+
 /* ---------- section ---------- */
 
 export default function TradeSection() {
   const { markets, ethUsd } = useLiveMarkets();
   const { address, isConnected } = useAccount();
-  const [ticker, setTicker] = useState(markets[0]?.ticker ?? "AAPL");
+  // Null until the trader picks one. The default then tracks the deepest
+  // book rather than whichever market happens to sit first in the registry,
+  // which is HIMS, whose pool is empty.
+  const [ticker, setTicker] = useState<string | null>(null);
   const [tf, setTf] = useState<HistorySpan>("1h");
   const [tab, setTab] = useState<"mine" | "trades">("trades");
 
-  const market = markets.find((m) => m.ticker === ticker) ?? markets[0];
-  const { candles, trades } = useMarketHistory(market?.ticker, tf);
+  const deepest = useMemo(
+    () => markets.reduce<LiveMarket | undefined>((best, m) => (m.tvl > (best?.tvl ?? -1) ? m : best), undefined),
+    [markets],
+  );
+
+  const market = (ticker ? markets.find((m) => m.ticker === ticker) : undefined) ?? deepest ?? markets[0];
+  const { candles, trades, window: measured, quotedOnly, widened } =
+    useMarketHistory(market?.ticker, tf);
 
   const series = useMemo(
     () =>
@@ -387,10 +411,18 @@ export default function TradeSection() {
         <MarketList markets={markets} active={market} onSelect={selectMarket} />
 
         <Panel
-          title={`${market.ticker} · ${usd(market.price)}`}
+          title={`${market.ticker} · ${priceLabel(market)}`}
           className="lg:h-[560px]"
           right={
             <div className="flex items-center gap-1">
+              {/* The span read is not always the span asked for: a quiet market
+                  widens its lookback until there is something to draw, and the
+                  axis has to say which range it is showing. */}
+              {measured && (
+                <span className="font-mono text-[9px] text-gray-600 mr-2">
+                  {quotedOnly ? "quoted, no trades" : widened ? `showing ${measured}` : null}
+                </span>
+              )}
               <span className={`font-mono text-[10px] mr-2 ${up ? "text-[#10B981]" : "text-red-400"}`}>
                 {up ? "+" : ""}
                 {market.change.toFixed(2)}%
