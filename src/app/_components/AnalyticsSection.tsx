@@ -28,7 +28,6 @@ import SectorPanels from "./SectorPanels";
  * in on its own once the contract exists.
  */
 
-const EXPLORER = "https://robinhoodchain.blockscout.com";
 
 const TOOLTIP = {
   background: "#14161B",
@@ -253,22 +252,20 @@ export default function AnalyticsSection() {
       {/* the only panel here that reads the companies rather than their pools */}
       <InsiderFeedPanel />
 
-      {/* staking, once there is a contract to read */}
-      <Panel
-        title="Staking"
-        right={
-          <span
-            className={`text-[9px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-md ${
-              staking?.deployed
-                ? "bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/25"
-                : "bg-[#232730] text-gray-400 border border-[#2C313B]"
-            }`}
-          >
-            {staking?.deployed ? "Live" : "Not deployed"}
-          </span>
-        }
-      >
-        {staking?.deployed ? (
+      {/*
+        Staking figures appear once there is a contract to read them from. An
+        empty panel explaining why it is empty is a note to ourselves, not
+        something a visitor needs.
+      */}
+      {staking?.deployed && (
+        <Panel
+          title="Staking"
+          right={
+            <span className="text-[9px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-md bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/25">
+              Live
+            </span>
+          }
+        >
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4">
             <Stat
               label="Staked DIVS"
@@ -295,29 +292,8 @@ export default function AnalyticsSection() {
               sub={`${num(staking.emissionsAccrued, 0)} accrued`}
             />
           </div>
-        ) : (
-          <div className="p-4">
-            <p className="text-[12px] leading-relaxed text-gray-400 max-w-[62ch] mb-3">
-              DivsStaking is not on Robinhood Chain yet. There is no code at the configured address,
-              so there is nothing to report here - staked totals, weight and emissions appear as
-              soon as the contract is deployed.
-            </p>
-            {staking?.address && (
-              <div className="flex items-center gap-2 text-[10px]">
-                <span className="text-gray-500">Configured address</span>
-                <a
-                  href={`${EXPLORER}/address/${staking.address}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-mono text-gray-400 hover:text-[#10B981] transition truncate"
-                >
-                  {staking.address}
-                </a>
-              </div>
-            )}
-          </div>
-        )}
-      </Panel>
+        </Panel>
+      )}
 
       <Footer />
     </div>

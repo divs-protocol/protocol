@@ -2,7 +2,7 @@
 
 import { Coins } from "lucide-react";
 import { usd, type LiveMarket } from "@/lib/live";
-import { DEFAULT_FEE_BPS, ROUTER_ADDRESS } from "@/lib/divsRouter";
+import { DEFAULT_FEE_BPS } from "@/lib/divsRouter";
 import PageHero, { Eyebrow, HeroCard, HeroStat } from "./PageHero";
 
 /**
@@ -115,14 +115,7 @@ export default function TradeHero({
             every market shows what a trade of your size will cost before you send it.
           </p>
 
-          {!ROUTER_ADDRESS && (
-            <p className="text-[12px] text-gray-500 max-w-lg mb-8">
-              The router is not deployed yet. Prices, depth and quotes are live, but an order
-              cannot be submitted.
-            </p>
-          )}
-
-          <div className={`flex flex-wrap gap-x-10 gap-y-4 ${ROUTER_ADDRESS ? "mt-8" : ""}`}>
+          <div className="flex flex-wrap gap-x-10 gap-y-4 mt-8">
             <HeroStat value={String(markets.length)} label="Markets you can route to" />
             <HeroStat value={String(active)} label="Trading in this window" />
             <HeroStat value="0" label="Orders resting on a book" />

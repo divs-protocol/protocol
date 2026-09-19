@@ -10,7 +10,7 @@ import {
   useWriteContract,
 } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Lock, Info, Copy, Check, ExternalLink } from "lucide-react";
+import { Loader2, Lock, Copy, Check, ExternalLink } from "lucide-react";
 import {
   STAKING_ADDRESS,
   DIVS_ADDRESS,
@@ -115,7 +115,7 @@ function AddressRow({ label, value }: { label: string; value?: `0x${string}` }) 
           </a>
         </>
       ) : (
-        <span className="text-[11px] text-gray-600 flex-1">Not deployed yet</span>
+        <span className="text-[11px] text-gray-600 flex-1">Coming soon</span>
       )}
     </div>
   );
@@ -343,18 +343,6 @@ export default function StakeSection() {
           weight.
         </p>
       </div>
-
-      {!live && (
-        <div className="flex items-start gap-2.5 bg-[#14161B] border border-[#232730] rounded-2xl p-3.5">
-          <Info size={14} className="text-gray-500 flex-shrink-0 mt-0.5" />
-          <p className="text-[11px] leading-relaxed text-gray-400">
-            The staking contract is not deployed yet, so balances read zero and staking is disabled.
-            The lock preview below is exact - it runs the same formula the contract uses. Set{" "}
-            <code className="text-[#10B981]">NEXT_PUBLIC_DIVS_STAKING_ADDRESS</code> to point this at
-            a deployment.
-          </p>
-        </div>
-      )}
 
       {/*
         One card, the way DARK does it: what you have, what you can collect,
@@ -647,7 +635,7 @@ export default function StakeSection() {
         title="Network"
         right={
           <span className="font-mono text-[10px] text-gray-500">
-            {live ? "live from the vault" : "not deployed"}
+            {live ? "live from the vault" : ""}
           </span>
         }
       >

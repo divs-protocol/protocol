@@ -281,7 +281,7 @@ export function useRouterTrade() {
   const busy = status === "approving" || status === "pending" || status === "confirming";
 
   const label = useMemo(() => {
-    if (!ROUTER_ADDRESS) return "Trading not live yet";
+    if (!ROUTER_ADDRESS) return "Coming soon";
     if (status === "approving") return "Approving…";
     if (status === "pending") return "Confirm in wallet…";
     if (status === "confirming") return "Submitting…";
