@@ -8,6 +8,28 @@ import { robinhood } from "@reown/appkit/networks";
 import { config, networks, wagmiAdapter, WC_PROJECT_ID, SITE_URL } from "@/lib/wagmi";
 
 /**
+ * Connect-modal features.
+ *
+ * `reownBranding` removes the "UX by reown" footer. AppKit reads it out of the
+ * local feature map at runtime, but 1.7.18 does not declare it on the `Features`
+ * type, so it is asserted here rather than spread through an `any`.
+ *
+ * It only applies while Reown Cloud does not return a setting of its own for
+ * the project. If it does, the remote value wins and AppKit logs a warning
+ * naming the setting it ignored, and the change has to be made in the project
+ * dashboard instead.
+ */
+const features = () =>
+  ({
+    // Wallets only. No email or social sign-in, which would mint a custodial
+    // account rather than connect one the person already controls.
+    email: false,
+    socials: false,
+    analytics: false,
+    reownBranding: false,
+  }) as Parameters<typeof createAppKit>[0]["features"];
+
+/**
  * AppKit is created once at module scope rather than inside the component.
  * It registers custom elements on the document, and doing that on every render
  * throws in development where effects run twice.
@@ -25,13 +47,7 @@ createAppKit({
     url: typeof window !== "undefined" ? window.location.origin : SITE_URL,
     icons: [`${SITE_URL}/logo.png`],
   },
-  features: {
-    // Wallets only. No email or social sign-in, which would mint a custodial
-    // account rather than connect one the person already controls.
-    email: false,
-    socials: false,
-    analytics: false,
-  },
+  features: features(),
   themeMode: "dark",
   themeVariables: {
     "--w3m-accent": "#10B981",
