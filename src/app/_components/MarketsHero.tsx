@@ -107,9 +107,8 @@ export default function MarketsHero({
           </h1>
 
           <p className="text-sm md:text-[15px] leading-relaxed text-gray-400 max-w-lg mb-4">
-            {markets.length} tokenized equities and funds on Robinhood Chain, each with its own
-            pool. Price, depth, volume and trade count are read from the contracts themselves, so
-            nothing on this page is quoted by a vendor.
+            {markets.length} tokenized equities and funds on Robinhood Chain. Live price, depth,
+            volume and trade count on every one of them.
           </p>
 
           <p className="text-[12px] text-gray-500 max-w-lg mb-8">

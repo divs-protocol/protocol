@@ -81,8 +81,7 @@ function FeeSplit({ market }: { market: LiveMarket | undefined }) {
       <p className="text-[10px] text-gray-600 leading-relaxed mt-3 pt-3 border-t border-[#232730]">
         {/* The fee is taken on the quote side so the router never holds an
             equity position between transactions. */}
-        Charged on the quote side of the trade, never in the stock token. No part of it is retained
-        by the protocol.
+        Every cent of the protocol fee goes to staked $DIVS. The protocol keeps none of it.
       </p>
     </HeroCard>
   );
@@ -111,10 +110,8 @@ export default function TradeHero({
           </h1>
 
           <p className="text-sm md:text-[15px] leading-relaxed text-gray-400 max-w-lg mb-4">
-            Pick a market, set a size, set the worst price you will accept. The trade settles
-            against the pool in one transaction. Nothing rests on an order book here, so the depth
-            you see is the size that moves the price a given distance, computed from the pool
-            itself.
+            Pick a market, choose a size, and the trade settles in one transaction. Live depth on
+            every market shows what a trade of your size will cost before you send it.
           </p>
 
           {!ROUTER_ADDRESS && (

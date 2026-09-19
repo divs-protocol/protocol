@@ -189,8 +189,8 @@ export default function AnalyticsHero({
           </h1>
 
           <p className="text-sm md:text-[15px] leading-relaxed text-gray-400 max-w-lg mb-8">
-            Breadth, volume, sector rotation and insider filings across all {MARKET_COUNT} markets.
-            Every figure is read from the pools and from the SEC, not from a vendor feed.
+            Breadth, volume, sector rotation and insider dealings across all {MARKET_COUNT}
+            markets, updating as they trade.
           </p>
 
           <div className="relative max-w-md mb-8">

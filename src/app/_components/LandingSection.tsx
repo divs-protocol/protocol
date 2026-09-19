@@ -222,8 +222,8 @@ function Hero() {
             {/* A definition, not a slogan. Someone arriving here should be able
                 to say what this is after one sentence. */}
             DIVS Protocol is an exchange for tokenized equities on Robinhood Chain. {MARKETS.length}{" "}
-            stocks and funds, open every hour of every day. Every trade pays a fee, and every fee
-            goes to holders staking $DIVS.
+            stocks and funds, open every hour of every day. Stake $DIVS and earn a share of every
+            trade.
           </p>
 
           <div className="flex flex-wrap items-center gap-3 mb-20">
@@ -327,7 +327,7 @@ function HowItWorks() {
   const steps = [
     "Connect a wallet. There is no account to open, no broker and no paperwork.",
     `Buy any of ${MARKETS.length} tokenized stocks and funds with ether or USDG, in one transaction.`,
-    `Every trade pays a protocol fee of ${(DEFAULT_FEE_BPS / 100).toFixed(2)}%, charged on the cash side and never in the stock.`,
+    `Every trade pays a protocol fee of ${(DEFAULT_FEE_BPS / 100).toFixed(2)}%.`,
     "That fee is split across staked $DIVS by weight. Lock for longer and your weight rises, up to 4x.",
   ];
 

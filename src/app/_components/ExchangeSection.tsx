@@ -509,7 +509,7 @@ function Products({ onNavigate, onTrade }: { onNavigate: (s: string) => void; on
     ["Markets", "Every listed market, sortable by price, volume and the fees it pays stakers.", () => onNavigate("markets")],
     ["Analytics", "Where fees come from, where they go, and how stake is distributed across locks.", () => onNavigate("analytics")],
     ["Portfolio", "Your holdings priced live, your staking weight, and what is claimable right now.", () => onNavigate("portfolio")],
-    ["Activity", "Every fill from your wallet, decoded from the pools rather than an order log.", () => onNavigate("activity")],
+    ["Activity", "Every fill from your wallet, with the price, size and fee on each one.", () => onNavigate("activity")],
     ["Docs", "The accounting rules, the contract reference and the risks, in full.", () => onNavigate("docs")],
     ["Account", "Wallet, network and balance, with the explorer a click away.", () => onNavigate("account")],
   ];
@@ -563,11 +563,11 @@ function QA() {
     ],
     [
       "Why do prices differ from my broker?",
-      "These prices come from on-chain pool liquidity, not from a listing venue. They track the underlying closely when liquidity is deep and can drift when it is thin.",
+      "Each price is set by the pool that stock trades in. It tracks the real stock closely when the pool is deep, and can drift when it is thin.",
     ],
     [
       "What is the multiplier on my share count?",
-      "Stock tokens follow ERC-8056: dividends and splits are applied through a display multiplier rather than by moving tokens. Your share count is the raw balance scaled by it.",
+      "Dividends and splits are applied by a multiplier on your balance, so your share count updates without any tokens moving in or out of your wallet.",
     ],
     [
       "Can trading be halted?",
