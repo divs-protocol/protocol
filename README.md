@@ -137,6 +137,41 @@ Two contracts are deployed: `DivsStaking` and `DivsRouter`. $DIVS itself comes
 from Pons, the stock tokens are Robinhood's and the pools are Uniswap's, so none
 of those are deployed or owned here.
 
+### Trading does not wait for the token
+
+The vault takes the $DIVS address in its constructor, so deploying the two
+together means trading waits on a token launch it does not depend on.
+
+The router does not need the vault. Constructed with no staking address it
+trades normally and keeps the fees it charges:
+
+```solidity
+if (staking == address(0)) return;   // _accrue, DivsRouter.sol
+```
+
+Nothing collected in the meantime is lost. When the vault is deployed later,
+the owner calls `setStaking`, anyone calls `flushFees`, and the entire
+accumulated balance reaches stakers in one transaction. That whole sequence is
+covered by `test_RouterWorksWithNoStakingAddress`.
+
+So there are two ways in. To open trading now, deploy the router alone with
+[`DivsRouterOnly.ts`](contracts/ignition/modules/DivsRouterOnly.ts) and skip to
+step 4. To deploy everything at once, once $DIVS exists, use
+[`DivsProtocol.ts`](contracts/ignition/modules/DivsProtocol.ts) and follow every
+step.
+
+Replacing the router later costs little. It holds no user balances and no
+mappings, only its own configuration and the fees waiting to be flushed, so a
+newer one is a deploy, a `flushFees` on the old one, and a changed environment
+variable. Nobody has to migrate anything.
+
+```bash
+cd contracts && npx hardhat ignition deploy ignition/modules/DivsRouterOnly.ts --network robinhood --parameters params.json
+```
+
+That module needs only `weth`, `usdg`, `usdgWethPool` and `feeBps`. No `divs`,
+no `owner` unless you already have a multisig to hand it to.
+
 ### 1. Configure the key
 
 The deploy key lives in Hardhat's keystore, never in a file or shell history.

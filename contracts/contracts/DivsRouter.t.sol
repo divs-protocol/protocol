@@ -208,6 +208,67 @@ contract DivsRouterTest is Test {
         assertEq(weth.balanceOf(address(staking)), (60 ether * FEE_BPS) / 10_000, "delivered later");
     }
 
+
+    /**
+     * The deployment that opens trading before $DIVS exists.
+     *
+     * A router constructed with no staking address has to trade normally and
+     * keep every fee it charges, so that the whole balance can be paid to
+     * stakers once the vault is finally deployed. Nothing collected in the
+     * meantime may be lost or stranded.
+     */
+    function test_RouterWorksWithNoStakingAddress() public {
+        DivsRouter fresh = new DivsRouter(
+            address(weth),
+            address(usdg),
+            address(usdgWethPool),
+            address(0),
+            FEE_BPS,
+            owner
+        );
+
+        // Trading works with no vault in existence.
+        _fundAlice(100 ether);
+        vm.startPrank(alice);
+        weth.approve(address(fresh), 100 ether);
+        uint256 out = fresh.buy(address(pool), 100 ether, 0, alice);
+        vm.stopPrank();
+
+        assertGt(out, 0, "a trade still executes");
+        assertEq(aapl.balanceOf(alice), out, "and the buyer is paid");
+
+        uint256 expected = (100 ether * FEE_BPS) / 10_000;
+        assertEq(fresh.pendingFees(), expected, "the fee is held, not lost");
+
+        // Selling works too, and adds to the same held balance.
+        vm.startPrank(alice);
+        aapl.approve(address(fresh), out);
+        uint256 back = fresh.sell(address(pool), out, 0, alice, false);
+        vm.stopPrank();
+
+        assertGt(back, 0, "a sale still executes");
+        assertGt(fresh.pendingFees(), expected, "and its fee is held as well");
+        uint256 held = fresh.pendingFees();
+
+        // Nobody can flush while there is nowhere to flush to.
+        vm.expectRevert("Staking unset");
+        fresh.flushFees();
+
+        // The vault arrives later. Everything collected in between is paid out.
+        vm.prank(owner);
+        fresh.setStaking(address(staking));
+
+        uint256 before = weth.balanceOf(address(staking));
+        fresh.flushFees();
+
+        assertEq(fresh.pendingFees(), 0, "nothing left behind");
+        assertEq(
+            weth.balanceOf(address(staking)) - before,
+            held,
+            "every fee charged before the vault existed reaches it"
+        );
+    }
+
     // --- access and limits -------------------------------------------------
 
     /// @dev The fee rate and the staking address are the router's owner powers, so
