@@ -199,18 +199,34 @@ threshold is crossed, then convert through the reference pool at whatever rate
 holds at that moment. A staker's realised fee therefore depends slightly on when
 the flush happens.
 
+**V3 pools only.** `DivsRouter` calls `IUniswapV3Pool.swap` directly, so only
+markets with a V3 pool are tradeable. Tokens with liquidity only in a V2 pair or
+a V4 pool are listed nowhere and trade nowhere through this protocol - V2 uses a
+different swap interface, and V4 has no pools to call at all, only one shared
+`PoolManager` reached through an `unlock` callback. Both are separate routing
+work, not a configuration change.
+
 ---
 
 ## 7. Deployment status
 
-**The contracts are not deployed.** No staking or router address is configured
-in production. The live site is read-only: it connects a wallet and reads
-balances, and the trade action renders "Trading not live yet".
+**`DivsRouter` is deployed and verified** on Robinhood Chain (4663), at
+[`0xd8B82A06892c61a3d36D397d64595607Dc8101e8`](https://robinhoodchain.blockscout.com/address/0xd8B82A06892c61a3d36D397d64595607Dc8101e8).
+It was deployed with no staking address, via
+[`DivsRouterOnly.ts`](contracts/ignition/modules/DivsRouterOnly.ts), so trading
+does not wait on $DIVS. Source is public and matches the deployed bytecode.
 
-$DIVS is launched on Pons and is not deployed from this repository. The protocol
-does not mint or own the token.
+**`DivsStaking` is not deployed.** $DIVS has not launched yet - it launches on
+Pons, and is not deployed from this repository or owned by the protocol. Fees
+accrue inside the router in the meantime (`pendingFees`, `pendingUsdgFees`) and
+are not lost; once the vault exists, `setStaking` then `flushFees` pays out
+everything collected up to that point. See "Trading does not wait for the
+token" in the [README](README.md) for the mechanics and the test that covers
+this sequence.
 
-Addresses will be published here on deployment.
+Routing today covers Uniswap V3 pools only. V2 and V4 pools are not yet
+reachable from this router - see §6 above, "V3 pools only," for why the pool
+interfaces differ and what routing each one would take.
 
 ---
 

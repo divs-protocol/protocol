@@ -11,7 +11,8 @@ The listed set is whichever Robinhood Stock Tokens have a Uniswap pool holding
 liquidity, so it grows as pools are seeded. `src/lib/exchange.ts` holds the
 registry.
 
-$DIVS is launched on Pons and is not deployed from this repository.
+$DIVS launches on Pons, not from this repository, and has not launched yet.
+Trading does not wait on it - see "Trading does not wait for the token" below.
 
 [SECURITY.md](SECURITY.md) is the technical and security overview: contract
 responsibilities, the invariants the test suite enforces, the approval policy,
