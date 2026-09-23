@@ -7,6 +7,12 @@ import {DivsStaking} from "./DivsStaking.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 import {MockWETH} from "./mocks/MockWETH.sol";
 import {MockV3Pool} from "./mocks/MockV3Pool.sol";
+import {MockV2Pair} from "./mocks/MockV2Pair.sol";
+import {MockPoolManager} from "./mocks/MockPoolManager.sol";
+
+import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
+import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 
 /// @dev The properties that matter here are conservation ones: a trade must
 /// never hand the trader more than the pool paid out, the fee must be exactly
@@ -24,6 +30,17 @@ contract DivsRouterTest is Test {
     MockV3Pool pool;
     MockV3Pool usdgPool;
     MockV3Pool usdgWethPool;
+
+    MockV2Pair v2Pair;
+
+    MockPoolManager poolManager;
+    PoolKey v4Key;
+    PoolKey v4HookedKey;
+    /// @dev A stand-in hook address. The mock pool manager never calls a
+    /// hook, so this only needs to be a distinct, nonzero address for the
+    /// router's own allowlist to key off - proving `_checkHook` gates
+    /// correctly is this suite's job, not re-proving V4's own hook dispatch.
+    address constant HOOK_ADDR = address(0xBEEF);
 
     address owner = address(0xA11CE);
     address alice = address(0xA1);
@@ -73,13 +90,48 @@ contract DivsRouterTest is Test {
         usdg.mint(address(usdgWethPool), 1_000_000_000e6);
         weth.mint(address(usdgWethPool), 1_000_000 ether);
 
+        // A V2 pair, same AAPL/WETH assets as the V3 pool above so both
+        // venues can be exercised against tokens the fuzz tests already know.
+        v2Pair = new MockV2Pair(address(aapl), address(weth));
+        aapl.mint(address(v2Pair), 1_000_000 ether);
+        weth.mint(address(v2Pair), 100_000 ether);
+
+        // Same rate as the V3 pool above, so a test can assert the identical
+        // exact amount through either venue.
+        poolManager = new MockPoolManager();
+        bool wethFirst = address(weth) < address(aapl);
+        v4Key = PoolKey({
+            currency0: Currency.wrap(wethFirst ? address(weth) : address(aapl)),
+            currency1: Currency.wrap(wethFirst ? address(aapl) : address(weth)),
+            fee: 3000,
+            tickSpacing: 60,
+            hooks: IHooks(address(0))
+        });
+        poolManager.setRate(v4Key, wethFirst ? RATE : 1e36 / RATE);
+
+        // A second pool, identical but for its hook, to prove the allowlist
+        // actually gates trading rather than merely decorating it. The mock
+        // manager never calls a hook, so this can be any nonzero address.
+        v4HookedKey = PoolKey({
+            currency0: v4Key.currency0,
+            currency1: v4Key.currency1,
+            fee: 3000,
+            tickSpacing: 60,
+            hooks: IHooks(HOOK_ADDR)
+        });
+        poolManager.setRate(v4HookedKey, wethFirst ? RATE : 1e36 / RATE);
+
+        aapl.mint(address(poolManager), 1_000_000 ether);
+        weth.mint(address(poolManager), 1_000_000 ether);
+
         router = new DivsRouter(
             address(weth),
             address(usdg),
             address(usdgWethPool),
             address(staking),
             FEE_BPS,
-            owner
+            owner,
+            address(poolManager)
         );
 
         // Someone has to be staked or notifyFee parks the fee in unallocatedFees.
@@ -224,7 +276,8 @@ contract DivsRouterTest is Test {
             address(usdgWethPool),
             address(0),
             FEE_BPS,
-            owner
+            owner,
+            address(poolManager)
         );
 
         // Trading works with no vault in existence.
@@ -455,6 +508,193 @@ contract DivsRouterTest is Test {
         vm.prank(alice);
         vm.expectRevert("Unsupported pair");
         router.buy(address(orphan), 1 ether, 0, alice);
+    }
+
+    // --- V2 trading ----------------------------------------------------
+
+    function test_BuyV2ChargesFeeOnTheWethSide() public {
+        uint256 spend = 10 ether;
+        _fundAlice(spend);
+
+        vm.prank(alice);
+        uint256 out = router.buyV2(address(v2Pair), spend, 0, alice);
+
+        uint256 fee = (spend * FEE_BPS) / 10_000;
+        uint256 netIn = spend - fee;
+        // V2's own 0.3% pool fee applies on top of the protocol fee already
+        // deducted, via the same constant-product formula a real pair uses.
+        uint256 expected = (netIn * 997 * 1_000_000 ether) / (100_000 ether * 1000 + netIn * 997);
+        assertEq(out, expected, "priced by the constant-product curve");
+        assertEq(aapl.balanceOf(alice), out, "tokens delivered to the trader");
+        assertEq(router.pendingFees() + weth.balanceOf(address(staking)), fee, "fee retained in full");
+    }
+
+    function test_BuyWithETHV2WrapsAndCharges() public {
+        vm.deal(alice, 5 ether);
+
+        vm.prank(alice);
+        uint256 out = router.buyWithETHV2{value: 5 ether}(address(v2Pair), 0, alice);
+
+        uint256 fee = (5 ether * FEE_BPS) / 10_000;
+        uint256 netIn = 5 ether - fee;
+        uint256 expected = (netIn * 997 * 1_000_000 ether) / (100_000 ether * 1000 + netIn * 997);
+        assertEq(out, expected, "same pricing as the WETH path");
+        assertEq(alice.balance, 0, "ETH spent");
+    }
+
+    function test_SellV2ChargesFeeOnProceeds() public {
+        uint256 size = 100 ether; // 100 AAPL
+        aapl.mint(alice, size);
+        vm.startPrank(alice);
+        aapl.approve(address(router), type(uint256).max);
+        uint256 out = router.sellV2(address(v2Pair), size, 0, alice, false);
+        vm.stopPrank();
+
+        uint256 gross = (size * 997 * 100_000 ether) / (1_000_000 ether * 1000 + size * 997);
+        uint256 fee = (gross * FEE_BPS) / 10_000;
+        assertEq(out, gross - fee, "trader receives proceeds net of the fee");
+        assertEq(weth.balanceOf(alice), out, "WETH delivered");
+    }
+
+    function test_SellV2CanUnwrapToEth() public {
+        uint256 size = 100 ether;
+        aapl.mint(alice, size);
+
+        vm.startPrank(alice);
+        aapl.approve(address(router), type(uint256).max);
+        uint256 out = router.sellV2(address(v2Pair), size, 0, alice, true);
+        vm.stopPrank();
+
+        assertEq(alice.balance, out, "paid in native ETH");
+        assertEq(weth.balanceOf(alice), 0, "nothing left wrapped");
+    }
+
+    // --- V4 trading ----------------------------------------------------
+
+    /// @dev The mock pool manager is seeded with the same rate as the V3
+    /// pool, so a V4 trade should be priced identically to its V3 twin.
+    function test_BuyV4ChargesFeeOnTheWethSide() public {
+        uint256 spend = 10 ether;
+        _fundAlice(spend);
+
+        vm.prank(alice);
+        uint256 out = router.buyV4(v4Key, spend, 0, alice);
+
+        uint256 fee = (spend * FEE_BPS) / 10_000;
+        assertEq(out, ((spend - fee) * RATE) / 1e18, "output priced on the net amount");
+        assertEq(aapl.balanceOf(alice), out, "tokens delivered to the trader");
+        assertEq(router.pendingFees() + weth.balanceOf(address(staking)), fee, "fee retained in full");
+    }
+
+    function test_BuyWithETHV4WrapsAndCharges() public {
+        vm.deal(alice, 5 ether);
+
+        vm.prank(alice);
+        uint256 out = router.buyWithETHV4{value: 5 ether}(v4Key, 0, alice);
+
+        uint256 fee = (5 ether * FEE_BPS) / 10_000;
+        assertEq(out, ((5 ether - fee) * RATE) / 1e18, "same pricing as the WETH path");
+        assertEq(alice.balance, 0, "ETH spent");
+    }
+
+    function test_SellV4ChargesFeeOnProceeds() public {
+        uint256 size = 100 ether; // 100 AAPL
+        aapl.mint(alice, size);
+        vm.startPrank(alice);
+        aapl.approve(address(router), type(uint256).max);
+        uint256 out = router.sellV4(v4Key, size, 0, alice, false);
+        vm.stopPrank();
+
+        uint256 gross = (size * 1e18) / RATE;
+        uint256 fee = (gross * FEE_BPS) / 10_000;
+        assertEq(out, gross - fee, "trader receives proceeds net of the fee");
+        assertEq(weth.balanceOf(alice), out, "WETH delivered");
+    }
+
+    function test_SellV4CanUnwrapToEth() public {
+        uint256 size = 100 ether;
+        aapl.mint(alice, size);
+
+        vm.startPrank(alice);
+        aapl.approve(address(router), type(uint256).max);
+        uint256 out = router.sellV4(v4Key, size, 0, alice, true);
+        vm.stopPrank();
+
+        assertEq(alice.balance, out, "paid in native ETH");
+        assertEq(weth.balanceOf(alice), 0, "nothing left wrapped");
+    }
+
+    function test_UnlockCallbackRejectsUnexpectedCaller() public {
+        vm.prank(address(0xBAD));
+        vm.expectRevert("Unexpected callback");
+        router.unlockCallback("");
+    }
+
+    function test_V4RevertsWhenPoolManagerUnset() public {
+        DivsRouter noV4 = new DivsRouter(
+            address(weth), address(usdg), address(usdgWethPool), address(staking), FEE_BPS, owner, address(0)
+        );
+
+        _fundAlice(10 ether);
+        vm.startPrank(alice);
+        weth.approve(address(noV4), type(uint256).max);
+        vm.expectRevert("V4 unset");
+        noV4.buyV4(v4Key, 10 ether, 0, alice);
+        vm.stopPrank();
+    }
+
+    // --- V4 hook allowlist -----------------------------------------------
+
+    function test_V4RejectsAnUnallowedHook() public {
+        _fundAlice(10 ether);
+        vm.prank(alice);
+        vm.expectRevert("Hook not allowed");
+        router.buyV4(v4HookedKey, 10 ether, 0, alice);
+    }
+
+    function test_V4TradesOnceItsHookIsAllowlisted() public {
+        vm.prank(owner);
+        router.setV4HookAllowed(HOOK_ADDR, true);
+
+        _fundAlice(10 ether);
+        vm.prank(alice);
+        uint256 out = router.buyV4(v4HookedKey, 10 ether, 0, alice);
+
+        assertGt(out, 0, "trades once the owner has reviewed and allowed the hook");
+    }
+
+    function test_OnlyOwnerAllowsAHook() public {
+        vm.prank(alice);
+        vm.expectRevert();
+        router.setV4HookAllowed(HOOK_ADDR, true);
+    }
+
+    function test_HooklessCannotBeAddedToTheAllowlist() public {
+        // There is nothing to allow or revoke - a hookless pool has been
+        // reachable since deployment, and every other V4 test already
+        // exercises that through `v4Key`, whose hook is address(0).
+        vm.prank(owner);
+        vm.expectRevert("Hookless is already allowed");
+        router.setV4HookAllowed(address(0), true);
+    }
+
+    // --- cross-venue -------------------------------------------------------
+
+    /// @dev The claim in DivsRouter's own header - that V2 and V4 reach the
+    /// same fee accrual as V3 - asserted directly rather than left implicit.
+    function test_AllThreeVenuesShareOneFeePot() public {
+        _fundAlice(180 ether);
+        vm.startPrank(alice);
+        router.buy(address(pool), 60 ether, 0, alice);
+        router.buyV2(address(v2Pair), 60 ether, 0, alice);
+        router.buyV4(v4Key, 60 ether, 0, alice);
+        vm.stopPrank();
+
+        // The 0.05 WETH threshold is cleared by the first trade alone, so all
+        // three fees land in the one flush.
+        assertEq(router.pendingFees(), 0, "flushed");
+        uint256 totalFee = (180 ether * FEE_BPS) / 10_000;
+        assertEq(weth.balanceOf(address(staking)), totalFee, "one pot for every venue");
     }
 
     // --- invariants --------------------------------------------------------

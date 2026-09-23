@@ -70,10 +70,22 @@ principal is always recoverable.
 
 `DivsRouter` charges on the WETH side either way — deducted from the input when
 buying, from the proceeds when selling — so staking only ever receives one
-asset. Swaps execute directly against each pool rather than through a periphery
-router; the expected pool is held in transient storage across the callback, so a
-callback from any other address reverts. Fees accrue in the router and flush
-past a threshold; `flushFees` is permissionless.
+asset. All three venues share the same fee accrual, so one `flushFees` empties
+whatever any of them collected.
+
+- **V3** swaps execute directly against each pool rather than through a
+  periphery router; the expected pool is held in transient storage across the
+  callback, so a callback from any other address reverts.
+- **V2** has no callback - the router pays by transferring the input token to
+  the pair before calling `swap`, and the pair sends the output directly.
+- **V4** has no pools to call, only one shared `PoolManager` reached through an
+  `unlock` callback; a market is identified by a `PoolKey`, not an address. A
+  pool's hook runs arbitrary code on every swap through it, so a hooked pool
+  only becomes reachable once its owner calls `setV4HookAllowed` - a hookless
+  pool needs no such review and is reachable from deployment.
+
+Fees accrue in the router and flush past a threshold; `flushFees` is
+permissionless.
 
 Default fee is 10 bps, owner-settable, capped at 100 bps in the setter.
 
@@ -125,9 +137,9 @@ cd contracts && npm run deploy:local
 ```
 
 `deploy:local` deploys the vault and the router against mock tokens and a mock
-pool, wires both staking pools, funds an emission period, stakes a locked
-position, and puts a trade through the router so the fee arrives the way it does
-in production.
+pool for each venue - V3, V2 and V4 - wires both staking pools, funds an
+emission period, stakes a locked position, and puts a trade through every
+venue so each fee arrives the way it does in production.
 
 Chain 31337 is offered in development builds only. Override its endpoint with
 `NEXT_PUBLIC_LOCAL_RPC_URL`, or enable it in a preview build with
@@ -173,7 +185,10 @@ cd contracts && npx hardhat ignition deploy ignition/modules/DivsRouterOnly.ts -
 ```
 
 That module needs only `weth`, `usdg`, `usdgWethPool` and `feeBps`. No `divs`,
-no `owner` unless you already have a multisig to hand it to.
+no `owner` unless you already have a multisig to hand it to. `poolManager` is
+optional too - pass Robinhood Chain's V4 singleton to enable V4 trading
+immediately, or leave it unset (V2 and V3 are unaffected either way; only V4
+calls need it, and they revert clearly - `"V4 unset"` - until it is set).
 
 ### 1. Configure the key
 
@@ -203,7 +218,8 @@ cd contracts && npx hardhat ignition deploy ignition/modules/DivsProtocol.ts --n
     "usdg": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
     "usdgWethPool": "0x69BfaF19C9f377BB306a89aEd9F6B07e2c1a8d9a",
     "owner": "<multisig>",
-    "feeBps": 10
+    "feeBps": 10,
+    "poolManager": "<Robinhood Chain's V4 PoolManager, or omit to deploy with V4 disabled>"
   }
 }
 ```
@@ -245,11 +261,14 @@ cd contracts && npx hardhat verify --network robinhood <staking address> <divs> 
 ```
 
 ```bash
-cd contracts && npx hardhat verify --network robinhood <router address> <weth> <usdg> <usdgWethPool> <staking> 10 <owner>
+cd contracts && npx hardhat verify --network robinhood <router address> <weth> <usdg> <usdgWethPool> <staking> 10 <owner> <poolManager>
 ```
 
 Constructor arguments must be given in the same order the contract declares
-them, or verification fails without saying why.
+them, or verification fails without saying why. The router deployed before V2
+and V4 support took six arguments, not seven - check which source it actually
+holds (`git log -- contracts/contracts/DivsRouter.sol`) before verifying an
+older deployment, or the argument count will not match either.
 
 ### 5. Point the application at them
 

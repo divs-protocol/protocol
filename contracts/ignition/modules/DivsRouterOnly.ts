@@ -25,6 +25,11 @@ import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
  * separate step, `transferOwnership` then `acceptOwnership` from the Safe,
  * because ownership here is two-step and the router needs no owner calls to
  * start working.
+ *
+ * `poolManager` works the same way as `staking`: pass zero and V2/V4 trading
+ * stays disabled (revert with a clear message) rather than failing the
+ * deployment, and `setV4HookAllowed` needs no vault either, so hooks can be
+ * reviewed and allowlisted independently of when $DIVS itself launches.
  */
 export default buildModule("DivsRouterOnly", (m) => {
   const weth = m.getParameter("weth");
@@ -42,7 +47,21 @@ export default buildModule("DivsRouterOnly", (m) => {
    */
   const staking = "0x0000000000000000000000000000000000000000";
 
-  const router = m.contract("DivsRouter", [weth, usdg, usdgWethPool, staking, feeBps, owner]);
+  /** The chain's V4 singleton. Zero deploys with V4 trading disabled. */
+  const poolManager = m.getParameter(
+    "poolManager",
+    "0x0000000000000000000000000000000000000000",
+  );
+
+  const router = m.contract("DivsRouter", [
+    weth,
+    usdg,
+    usdgWethPool,
+    staking,
+    feeBps,
+    owner,
+    poolManager,
+  ]);
 
   return { router };
 });

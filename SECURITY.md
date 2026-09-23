@@ -199,12 +199,13 @@ threshold is crossed, then convert through the reference pool at whatever rate
 holds at that moment. A staker's realised fee therefore depends slightly on when
 the flush happens.
 
-**V3 pools only.** `DivsRouter` calls `IUniswapV3Pool.swap` directly, so only
-markets with a V3 pool are tradeable. Tokens with liquidity only in a V2 pair or
-a V4 pool are listed nowhere and trade nowhere through this protocol - V2 uses a
-different swap interface, and V4 has no pools to call at all, only one shared
-`PoolManager` reached through an `unlock` callback. Both are separate routing
-work, not a configuration change.
+**Hooked V4 pools need individual review.** A hookless V4 pool is reachable
+from deployment - there is no third-party code in the path, so nothing to
+review. A hooked one runs arbitrary code on every swap through it: a hidden
+fee, a trade blocked under conditions only the hook can see, behaviour that
+only surfaces later. `_checkHook` refuses any hook the owner has not
+allowlisted with `setV4HookAllowed`, so a new hook is a queue - review it,
+allow it - not a router change.
 
 ---
 
@@ -216,21 +217,25 @@ It was deployed with no staking address, via
 [`DivsRouterOnly.ts`](contracts/ignition/modules/DivsRouterOnly.ts), so trading
 does not wait on $DIVS. Source is public and matches the deployed bytecode.
 
+**That deployment routes V3 only.** V2 and V4 support - `buyV2`/`sellV2`,
+`buyV4`/`sellV4`, the hook allowlist - landed in the source after this address
+was deployed, so the live contract predates all three. The capability exists
+in this repository and is covered by the test suite; it is not yet live until
+the router is redeployed with a V4 `poolManager` address and the app points at
+the new one. Nothing about that redeploy is disruptive - see "Replacing the
+router later costs little" in the [README](README.md) - it holds no user
+balances to migrate.
+
 **`DivsStaking` is not deployed.** $DIVS has not launched yet - it launches
 through a Uniswap V4 launchpad, and is not deployed from this repository or
-owned by the protocol. Its pool will be V4, which this router cannot reach (see
-"V3 pools only" above); staking a position does not depend on where the token
+owned by the protocol. Staking a position does not depend on where the token
 trades, only on holding it, so this does not block `DivsStaking` once it is
-live. Fees
-accrue inside the router in the meantime (`pendingFees`, `pendingUsdgFees`) and
-are not lost; once the vault exists, `setStaking` then `flushFees` pays out
-everything collected up to that point. See "Trading does not wait for the
-token" in the [README](README.md) for the mechanics and the test that covers
-this sequence.
-
-Routing today covers Uniswap V3 pools only. V2 and V4 pools are not yet
-reachable from this router - see §6 above, "V3 pools only," for why the pool
-interfaces differ and what routing each one would take.
+live - once the redeploy above has happened, the router will be able to reach
+$DIVS's own pool too, the same as any other V4 market. Fees accrue inside the
+router in the meantime (`pendingFees`, `pendingUsdgFees`) and are not lost;
+once the vault exists, `setStaking` then `flushFees` pays out everything
+collected up to that point. See "Trading does not wait for the token" in the
+[README](README.md) for the mechanics and the test that covers this sequence.
 
 ---
 

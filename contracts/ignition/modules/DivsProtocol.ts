@@ -3,12 +3,15 @@ import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 /**
  * Deploys the staking vault and the router that charges the fee it distributes.
  *
- * $DIVS itself is not deployed here - it is launched on Pons, and its address
- * is passed in as `divs`. Nothing in this module mints or owns the token; the
- * vault only ever holds what stakers deposit and what is funded for emissions.
+ * $DIVS itself is not deployed here - it launches through a Uniswap V4
+ * launchpad, and its address is passed in as `divs`. Nothing in this module
+ * mints or owns the token; the vault only ever holds what stakers deposit and
+ * what is funded for emissions.
  *
  * `weth` must be the canonical wrapped ether for the target chain, since fees
- * are collected and distributed in it.
+ * are collected and distributed in it. `poolManager` is the chain's V4
+ * singleton; passing zero deploys with V4 trading disabled rather than
+ * failing the deployment, matching how `staking` may also be zero.
  *
  * Order matters: the router takes the staking address in its constructor, so
  * staking is deployed first. Staking needs nothing back - `notifyFee` is
@@ -23,7 +26,7 @@ import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
  * argument would not be.
  */
 export default buildModule("DivsProtocol", (m) => {
-  /** The $DIVS token from Pons. */
+  /** The $DIVS token, launched through a Uniswap V4 launchpad. */
   const divs = m.getParameter("divs");
   const weth = m.getParameter("weth");
 
@@ -39,6 +42,12 @@ export default buildModule("DivsProtocol", (m) => {
   const usdg = m.getParameter("usdg");
   const usdgWethPool = m.getParameter("usdgWethPool");
 
+  /** The chain's V4 singleton. Zero deploys with V4 trading disabled. */
+  const poolManager = m.getParameter(
+    "poolManager",
+    "0x0000000000000000000000000000000000000000",
+  );
+
   /** Protocol fee in basis points, charged on the quote side of every trade. */
   const feeBps = m.getParameter("feeBps", 10n);
 
@@ -48,7 +57,15 @@ export default buildModule("DivsProtocol", (m) => {
   // This is onlyOwner, which is why the deployer holds the vault until here.
   const addPool = m.call(staking, "addPool", [divs, 10_000n]);
 
-  const router = m.contract("DivsRouter", [weth, usdg, usdgWethPool, staking, feeBps, deployer]);
+  const router = m.contract("DivsRouter", [
+    weth,
+    usdg,
+    usdgWethPool,
+    staking,
+    feeBps,
+    deployer,
+    poolManager,
+  ]);
 
   /**
    * Nominate the real owner. Neither transfer completes until `owner` calls

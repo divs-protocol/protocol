@@ -1,11 +1,12 @@
 /**
  * Stands the protocol up on a local node: the staking vault and the router,
- * against mock DIVS, mock WETH and a mock pool. Wires two staking pools, funds
- * emissions, stakes a position, and then puts a real trade through the router
- * so the fee arrives the way it will in production.
+ * against mock DIVS, mock WETH, a mock V3 pool, a mock V2 pair and a mock V4
+ * pool manager. Wires two staking pools, funds emissions, stakes a position,
+ * and puts a real trade through each venue so every fee arrives the way it
+ * will in production.
  *
- * $DIVS is launched on Pons rather than deployed from this repo, so it is a
- * mock here - the vault treats it as any ERC20.
+ * $DIVS launches through a Uniswap V4 launchpad rather than being deployed
+ * from this repo, so it is a mock here - the vault treats it as any ERC20.
  *
  *   npx hardhat node
  *   npx hardhat run scripts/deploy-local.ts --network localhost
@@ -18,15 +19,18 @@ async function main() {
   const { ethers } = await network.connect();
   const [deployer, alice] = await ethers.getSigners();
 
-  // $DIVS is launched on Pons, so a mock stands in for it locally. Nothing in
-  // the protocol mints or owns the token - only this script does, to have
-  // something to stake.
+  // $DIVS launches through a Uniswap V4 launchpad, so a mock stands in for it
+  // locally. Nothing in the protocol mints or owns the token - only this
+  // script does, to have something to stake.
   const divs = await ethers.deployContract("MockERC20", ["DIVS", "DIVS"]);
   const weth = await ethers.deployContract("MockWETH");
   const usdg = await ethers.deployContract("MockERC20", ["Global Dollar", "USDG"]);
   const lp = await ethers.deployContract("MockERC20", ["DIVS/WETH LP", "DIVS-LP"]);
   const aapl = await ethers.deployContract("MockERC20", ["Apple", "AAPL"]);
   const amzn = await ethers.deployContract("MockERC20", ["Amazon", "AMZN"]);
+  // One more stock per venue, so the local chain exercises all three.
+  const msft = await ethers.deployContract("MockERC20", ["Microsoft", "MSFT"]);
+  const goog = await ethers.deployContract("MockERC20", ["Alphabet", "GOOG"]);
   await Promise.all([
     divs.waitForDeployment(),
     weth.waitForDeployment(),
@@ -34,6 +38,8 @@ async function main() {
     lp.waitForDeployment(),
     aapl.waitForDeployment(),
     amzn.waitForDeployment(),
+    msft.waitForDeployment(),
+    goog.waitForDeployment(),
   ]);
   await (await usdg.setDecimals(6)).wait();
 
@@ -64,6 +70,9 @@ async function main() {
   await (await usdg.mint(await usdgWethPool.getAddress(), 10n ** 15n)).wait();
   await (await weth.mint(await usdgWethPool.getAddress(), ethers.parseEther("1000000"))).wait();
 
+  const poolManager = await ethers.deployContract("MockPoolManager");
+  await poolManager.waitForDeployment();
+
   // 10 bps on the quote side, matching the Ignition default.
   const router = await ethers.deployContract("DivsRouter", [
     wethAddress,
@@ -72,6 +81,7 @@ async function main() {
     await staking.getAddress(),
     10n,
     deployer.address,
+    await poolManager.getAddress(),
   ]);
   await router.waitForDeployment();
 
@@ -103,6 +113,32 @@ async function main() {
   await (await aapl.mint(poolAddress, ethers.parseEther("1000000"))).wait();
   await (await weth.mint(poolAddress, ethers.parseEther("1000000"))).wait();
 
+  // A V2 market: 1 WETH buys 8 MSFT. No callback, so seeding it is a plain
+  // mint of reserves onto the pair.
+  const msftAddress = await msft.getAddress();
+  const v2Pair = await ethers.deployContract("MockV2Pair", [wethAddress, msftAddress]);
+  await v2Pair.waitForDeployment();
+  const v2PairAddress = await v2Pair.getAddress();
+  await (await msft.mint(v2PairAddress, ethers.parseEther("8000000"))).wait();
+  await (await weth.mint(v2PairAddress, ethers.parseEther("1000000"))).wait();
+
+  // A V4 market: 1 WETH buys 5 GOOG. V4 has no deployed pool contract - the
+  // key itself is the identifier, and the mock manager is told its rate
+  // directly rather than seeded with reserves priced by a curve.
+  const googAddress = await goog.getAddress();
+  const wethIsToken0V4 = wethAddress.toLowerCase() < googAddress.toLowerCase();
+  const v4Rate = ethers.parseEther("5");
+  const v4Key = {
+    currency0: wethIsToken0V4 ? wethAddress : googAddress,
+    currency1: wethIsToken0V4 ? googAddress : wethAddress,
+    fee: 3000n,
+    tickSpacing: 60n,
+    hooks: ethers.ZeroAddress,
+  };
+  await (await poolManager.setRate(v4Key, wethIsToken0V4 ? v4Rate : (10n ** 36n) / v4Rate)).wait();
+  await (await goog.mint(await poolManager.getAddress(), ethers.parseEther("1000000"))).wait();
+  await (await weth.mint(await poolManager.getAddress(), ethers.parseEther("1000000"))).wait();
+
   // Fund a 30-day emission period. The rate is derived from what is funded, so
   // emissions can never be scheduled without the DIVS to back them.
   const emissionBudget = ethers.parseEther("100000");
@@ -130,6 +166,18 @@ async function main() {
   await (await usdg.approve(await router.getAddress(), usdgSpend)).wait();
   await (await router.buy(await amznPool.getAddress(), usdgSpend, 0n, deployer.address)).wait();
 
+  // One trade through each new venue, so all three are proven live locally,
+  // not just deployed.
+  const v2Spend = ethers.parseEther("10");
+  await (await weth.mint(deployer.address, v2Spend)).wait();
+  await (await weth.approve(await router.getAddress(), v2Spend)).wait();
+  await (await router.buyV2(v2PairAddress, v2Spend, 0n, deployer.address)).wait();
+
+  const v4Spend = ethers.parseEther("10");
+  await (await weth.mint(deployer.address, v4Spend)).wait();
+  await (await weth.approve(await router.getAddress(), v4Spend)).wait();
+  await (await router.buyV4(v4Key, v4Spend, 0n, deployer.address)).wait();
+
   const [pendingWeth, pendingDivs] = await staking.pendingRewards(alice.address);
 
   console.log("\nDeployed to localhost (chain 31337):");
@@ -143,6 +191,10 @@ async function main() {
   console.log("  USDG (mock) :", usdgAddress);
   console.log("  AMZN        :", amznAddress);
   console.log("  AMZN pool   :", await amznPool.getAddress(), "(USDG quoted)");
+  console.log("  V4 manager  :", await poolManager.getAddress(), "(mock)");
+  console.log("  MSFT        :", msftAddress);
+  console.log("  MSFT pair   :", v2PairAddress, "(V2, WETH quoted)");
+  console.log("  GOOG        :", googAddress, "(V4, WETH quoted, hookless)");
 
   console.log("\nTraded 60 WETH through the router:");
   console.log("  AAPL bought   :", ethers.formatEther(await aapl.balanceOf(deployer.address)));
@@ -154,6 +206,20 @@ async function main() {
   console.log("  USDG held       :", await router.pendingUsdgFees());
   console.log("  staking (WETH)  :", ethers.formatEther(await weth.balanceOf(await staking.getAddress())));
   console.log("  staking (USDG)  :", await usdg.balanceOf(await staking.getAddress()), "(must be 0)");
+
+  console.log("\nTraded 10 WETH through V2 and 10 WETH through V4:");
+  console.log("  MSFT bought (V2):", ethers.formatEther(await msft.balanceOf(deployer.address)));
+  console.log("  GOOG bought (V4):", ethers.formatEther(await goog.balanceOf(deployer.address)));
+  console.log(
+    "  staking (WETH)  :",
+    ethers.formatEther(await weth.balanceOf(await staking.getAddress())),
+    "(flushed from all four trades)",
+  );
+  console.log(
+    "  held in router  :",
+    ethers.formatEther(await router.pendingFees()),
+    "(these two, below the flush threshold)",
+  );
 
   console.log("\nAlice staked 1000 DIVS locked 52 weeks (4x weight)");
   console.log("  pending WETH:", ethers.formatEther(pendingWeth));
