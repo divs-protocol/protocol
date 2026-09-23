@@ -216,8 +216,12 @@ It was deployed with no staking address, via
 [`DivsRouterOnly.ts`](contracts/ignition/modules/DivsRouterOnly.ts), so trading
 does not wait on $DIVS. Source is public and matches the deployed bytecode.
 
-**`DivsStaking` is not deployed.** $DIVS has not launched yet - it launches on
-Pons, and is not deployed from this repository or owned by the protocol. Fees
+**`DivsStaking` is not deployed.** $DIVS has not launched yet - it launches
+through a Uniswap V4 launchpad, and is not deployed from this repository or
+owned by the protocol. Its pool will be V4, which this router cannot reach (see
+"V3 pools only" above); staking a position does not depend on where the token
+trades, only on holding it, so this does not block `DivsStaking` once it is
+live. Fees
 accrue inside the router in the meantime (`pendingFees`, `pendingUsdgFees`) and
 are not lost; once the vault exists, `setStaking` then `flushFees` pays out
 everything collected up to that point. See "Trading does not wait for the

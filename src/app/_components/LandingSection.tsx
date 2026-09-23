@@ -338,7 +338,7 @@ function HowItWorks() {
     ],
     [
       "$DIVS",
-      "The token you stake. It is launched on Pons and the protocol neither mints it nor owns it.",
+      "The token you stake. It launches through a Uniswap V4 launchpad and the protocol neither mints it nor owns it.",
     ],
     [
       "DivsRouter",

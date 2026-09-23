@@ -11,8 +11,9 @@ The listed set is whichever Robinhood Stock Tokens have a Uniswap pool holding
 liquidity, so it grows as pools are seeded. `src/lib/exchange.ts` holds the
 registry.
 
-$DIVS launches on Pons, not from this repository, and has not launched yet.
-Trading does not wait on it - see "Trading does not wait for the token" below.
+$DIVS launches through a Uniswap V4 launchpad, not from this repository, and
+has not launched yet. Trading does not wait on it - see "Trading does not wait
+for the token" below.
 
 [SECURITY.md](SECURITY.md) is the technical and security overview: contract
 responsibilities, the invariants the test suite enforces, the approval policy,
@@ -134,9 +135,10 @@ Chain 31337 is offered in development builds only. Override its endpoint with
 
 ## Deployment
 
-Two contracts are deployed: `DivsStaking` and `DivsRouter`. $DIVS itself comes
-from Pons, the stock tokens are Robinhood's and the pools are Uniswap's, so none
-of those are deployed or owned here.
+Two contracts are deployed: `DivsStaking` and `DivsRouter`. $DIVS itself
+launches through a Uniswap V4 launchpad, the stock tokens are Robinhood's and
+the pools they trade in are Uniswap's, so none of those are deployed or owned
+here.
 
 ### Trading does not wait for the token
 
@@ -196,7 +198,7 @@ cd contracts && npx hardhat ignition deploy ignition/modules/DivsProtocol.ts --n
 ```json
 {
   "DivsProtocol": {
-    "divs": "<the Pons token>",
+    "divs": "<the $DIVS token address>",
     "weth": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
     "usdg": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
     "usdgWethPool": "0x69BfaF19C9f377BB306a89aEd9F6B07e2c1a8d9a",
