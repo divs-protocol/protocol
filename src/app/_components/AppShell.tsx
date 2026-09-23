@@ -16,6 +16,7 @@ import LandingSection from "./LandingSection";
 import AlertsBell from "./AlertsBell";
 import MarketsSection from "./MarketsSection";
 import { compact, num, usd, useDepth, useLiveMarkets, useMarketHistory } from "@/lib/live";
+import { quotePerShare } from "@/lib/exchange";
 import {
   DEFAULT_FEE_BPS,
   ROUTER_ADDRESS,
@@ -364,19 +365,26 @@ export default function AppShell({ section }: { section: string }) {
    * Quotes use the pool's marginal price, so they ignore the trade's own
    * impact. What protects the trader is the minimum submitted on-chain, which
    * is the quote less the chosen slippage - the swap reverts below it.
+   *
+   * `quotePerShare` reads the market's own quote asset - WETH for most,
+   * USDG for the rest - rather than assuming WETH the way `price / ethUsd`
+   * would. That division happens to equal the WETH figure only because a
+   * WETH market's USD price is itself `wethPerShare * ethUsd`; for a USDG
+   * market it produces a plausible-looking number with no relationship to
+   * what the trade is actually worth.
    */
-  const wethPrice = ethUsd ? (selected?.price ?? 0) / ethUsd : 0;
+  const quotePrice = selected ? quotePerShare(selected, selected.sqrtPriceX96) : 0;
   const feeCost = orderTotal * (DEFAULT_FEE_BPS / 10_000);
 
-  // Buying spends WETH for shares; selling spends shares for WETH.
-  const wethIn = orderQty * wethPrice;
-  const grossOut = side === "buy" ? orderQty : orderQty * wethPrice;
+  // Buying spends the quote asset for shares; selling spends shares for it.
+  const quoteIn = orderQty * quotePrice;
+  const grossOut = side === "buy" ? orderQty : orderQty * quotePrice;
   const quoted = grossOut * (1 - DEFAULT_FEE_BPS / 10_000);
   const minOut = quoted * (1 - slippage / 100);
 
   const submitTrade = () => {
-    if (!selected || !wethPrice) return;
-    if (side === "buy") trade.buy(selected, wethIn, minOut);
+    if (!selected || !quotePrice) return;
+    if (side === "buy") trade.buy(selected, quoteIn, minOut);
     else trade.sell(selected, orderQty, minOut);
   };
 
@@ -802,7 +810,7 @@ export default function AppShell({ section }: { section: string }) {
                           <span className="text-gray-300 font-mono">
                             {side === "buy"
                               ? `${num(minOut, 4)} ${selected?.ticker ?? ""}`
-                              : `${num(minOut, 5)} WETH`}
+                              : `${num(minOut, 5)} ${selected?.quote ?? ""}`}
                           </span>
                         </div>
                       </div>

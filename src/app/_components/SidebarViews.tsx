@@ -1,11 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatUnits, parseAbiItem } from "viem";
 import { useAccount, useBalance, useDisconnect, usePublicClient, useReadContracts } from "wagmi";
 import { robinhood } from "wagmi/chains";
 import { Copy, Check, ExternalLink, LogOut, Loader2 } from "lucide-react";
-import { MARKETS, ETH_USD_POOL, poolAbi, usdPerShare, ethUsdFromSqrt } from "@/lib/exchange";
+import {
+  MARKETS,
+  type V3Market,
+  type V4Market,
+  ETH_USD_POOL,
+  V4_POOL_MANAGER,
+  poolAbi,
+  v4ManagerAbi,
+  v4StateSlot,
+  v4SlotHex,
+  v4PoolId,
+  v4DecodeSqrtPriceX96,
+  usdPerShare,
+  quoteDecimals,
+  ethUsdFromSqrt,
+} from "@/lib/exchange";
 import { STOCK_TOKENS, stockTokenAbi, toDisplayShares } from "@/lib/stockTokens";
 import { STAKING_ADDRESS, stakingAbi, DIVS_POOL, LP_POOL } from "@/lib/divsStaking";
 import ConnectPrompt from "./ConnectPrompt";
@@ -17,10 +32,23 @@ import Footer from "./Footer";
  * Each reads the connected address from Robinhood Chain. Where there is nothing
  * to show they say so rather than rendering sample rows - these describe
  * someone's own money, so an illustrative number would read as their balance.
+ *
+ * Pricing and fill history read from both venues that trade today: V3's
+ * `slot0` and V4's `extsload` against the one shared `PoolManager`, the same
+ * direct-RPC pattern `ExchangeTerminal` uses. V2 has no registry entries yet
+ * (see `src/lib/exchange.ts`), so there is nothing of that venue to price or
+ * search fills for.
  */
+const V3_MARKETS = MARKETS.filter((m): m is V3Market => m.venue === "v3");
+const V4_MARKETS = MARKETS.filter((m): m is V4Market => m.venue === "v4");
 
 const SWAP_EVENT = parseAbiItem(
   "event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)",
+);
+
+/** The V4 singleton's Swap event - no `recipient`, only `sender`, and the pool is `id`, not the log's own address. */
+const V4_SWAP_EVENT = parseAbiItem(
+  "event Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 fee)",
 );
 
 const usd = (n: number, d = 2) =>
@@ -60,25 +88,36 @@ function Stat({ label, value, sub, accent }: { label: string; value: string; sub
   );
 }
 
-/** Live USD price per ticker, from the pools. */
+/** Live USD price per ticker, from the pools - V3's `slot0`, V4's `extsload`. */
 function usePriceMap() {
+  const v4Slot0Hex = useMemo(() => V4_MARKETS.map((m) => v4SlotHex(v4StateSlot(v4PoolId(m)))), []);
+
   const { data } = useReadContracts({
     contracts: [
-      ...MARKETS.map(
+      ...V3_MARKETS.map(
         (m) => ({ address: m.pool, abi: poolAbi, functionName: "slot0", chainId: robinhood.id }) as const,
+      ),
+      ...v4Slot0Hex.map(
+        (slot) =>
+          ({ address: V4_POOL_MANAGER, abi: v4ManagerAbi, functionName: "extsload", args: [slot], chainId: robinhood.id }) as const,
       ),
       { address: ETH_USD_POOL, abi: poolAbi, functionName: "slot0", chainId: robinhood.id } as const,
     ],
     query: { refetchInterval: 20_000 },
   });
 
-  const ethRaw = data?.[MARKETS.length]?.result as readonly unknown[] | undefined;
+  const n3 = V3_MARKETS.length;
+  const ethRaw = data?.[n3 + V4_MARKETS.length]?.result as readonly unknown[] | undefined;
   const ethUsd = ethRaw ? ethUsdFromSqrt(ethRaw[0] as bigint) : 0;
 
   const prices: Record<string, number> = {};
-  MARKETS.forEach((m, i) => {
+  V3_MARKETS.forEach((m, i) => {
     const slot0 = data?.[i]?.result as readonly unknown[] | undefined;
     if (slot0) prices[m.ticker] = usdPerShare(m, slot0[0] as bigint, ethUsd);
+  });
+  V4_MARKETS.forEach((m, i) => {
+    const word0 = data?.[n3 + i]?.result as `0x${string}` | undefined;
+    if (word0) prices[m.ticker] = usdPerShare(m, v4DecodeSqrtPriceX96(word0), ethUsd);
   });
 
   return { prices, ethUsd };
@@ -195,7 +234,20 @@ export function PortfolioView() {
 
 /* ---------------- Activity ---------------- */
 
-type Fill = { key: string; ticker: string; side: "buy" | "sell"; shares: number; weth: number; block: number };
+/**
+ * `quote`/`quoteSymbol` rather than a WETH-specific field: fills across
+ * different tickers can be denominated in either quote asset, so one shared
+ * "WETH" column header would mislabel every USDG fill in the same list.
+ */
+type Fill = {
+  key: string;
+  ticker: string;
+  side: "buy" | "sell";
+  shares: number;
+  quote: number;
+  quoteSymbol: "WETH" | "USDG";
+  block: number;
+};
 
 export function ActivityView() {
   const { address, isConnected } = useAccount();
@@ -211,29 +263,70 @@ export function ActivityView() {
       setLoading(true);
       try {
         const head = await client.getBlockNumber();
-        const logs = await client.getLogs({
-          address: MARKETS.map((m) => m.pool),
-          event: SWAP_EVENT,
-          args: { recipient: address },
-          fromBlock: head > 40_000n ? head - 40_000n : 0n,
-          toBlock: head,
-        });
-        const out: Fill[] = logs.map((l, i) => {
-          const m = MARKETS.find((x) => x.pool.toLowerCase() === l.address.toLowerCase())!;
+        const fromBlock = head > 40_000n ? head - 40_000n : 0n;
+        const abs = (v: bigint) => (v < 0n ? -v : v);
+
+        // V3's Swap carries a `recipient`, so fills are found by filtering on
+        // it directly. V4's Swap has no such field, only `sender` - who
+        // initiated the trade, which for a router-executed swap is the
+        // trader either way - so that is what this filters on instead.
+        const [v3Logs, v4Logs] = await Promise.all([
+          client.getLogs({
+            address: V3_MARKETS.map((m) => m.pool),
+            event: SWAP_EVENT,
+            args: { recipient: address },
+            fromBlock,
+            toBlock: head,
+          }),
+          V4_MARKETS.length
+            ? client.getLogs({
+                address: V4_POOL_MANAGER,
+                event: V4_SWAP_EVENT,
+                args: { sender: address },
+                fromBlock,
+                toBlock: head,
+              })
+            : Promise.resolve([]),
+        ]);
+
+        const v3Fills: Fill[] = v3Logs.map((l, i) => {
+          const m = V3_MARKETS.find((x) => x.pool.toLowerCase() === l.address.toLowerCase())!;
           const a0 = l.args.amount0 as bigint;
           const a1 = l.args.amount1 as bigint;
           const quoteAmt = m.quoteIsToken0 ? a0 : a1;
           const shareAmt = m.quoteIsToken0 ? a1 : a0;
-          const abs = (v: bigint) => (v < 0n ? -v : v);
           return {
-            key: `${l.blockNumber}-${l.logIndex}-${i}`,
+            key: `v3-${l.blockNumber}-${l.logIndex}-${i}`,
             ticker: m.ticker,
             side: quoteAmt < 0n ? "sell" : "buy",
             shares: Number(formatUnits(abs(shareAmt), 18)),
-            weth: Number(formatUnits(abs(quoteAmt), 18)),
+            quote: Number(formatUnits(abs(quoteAmt), quoteDecimals(m))),
+            quoteSymbol: m.quote,
             block: Number(l.blockNumber),
           };
         });
+
+        const v4Fills: Fill[] = v4Logs.flatMap((l, i) => {
+          const m = V4_MARKETS.find((x) => v4PoolId(x).toLowerCase() === (l.args.id ?? "").toLowerCase());
+          if (!m) return [];
+          const a0 = BigInt(l.args.amount0 ?? 0);
+          const a1 = BigInt(l.args.amount1 ?? 0);
+          const quoteAmt = m.quoteIsToken0 ? a0 : a1;
+          const shareAmt = m.quoteIsToken0 ? a1 : a0;
+          return [
+            {
+              key: `v4-${l.blockNumber}-${l.logIndex}-${i}`,
+              ticker: m.ticker,
+              side: quoteAmt < 0n ? ("sell" as const) : ("buy" as const),
+              shares: Number(formatUnits(abs(shareAmt), 18)),
+              quote: Number(formatUnits(abs(quoteAmt), quoteDecimals(m))),
+              quoteSymbol: m.quote,
+              block: Number(l.blockNumber),
+            },
+          ];
+        });
+
+        const out = [...v3Fills, ...v4Fills].sort((a, b) => a.block - b.block);
         if (!cancelled) setFills(out.reverse());
       } catch {
         if (!cancelled) setFills([]);
@@ -280,7 +373,8 @@ export function ActivityView() {
                   <th className="px-3 py-2 text-left font-semibold">Side</th>
                   <th className="px-3 py-2 text-left font-semibold">Market</th>
                   <th className="px-3 py-2 text-right font-semibold">Shares</th>
-                  <th className="px-3 py-2 text-right font-semibold">WETH</th>
+                  {/* No single header names a unit - fills mix WETH- and USDG-quoted markets, so each row carries its own. */}
+                  <th className="px-3 py-2 text-right font-semibold">Paid / received</th>
                   <th className="px-3 py-2 text-right font-semibold">Block</th>
                 </tr>
               </thead>
@@ -292,7 +386,9 @@ export function ActivityView() {
                     </td>
                     <td className="px-3 py-2 text-white font-semibold">{f.ticker}</td>
                     <td className="px-3 py-2 text-right font-mono text-gray-300">{num(f.shares)}</td>
-                    <td className="px-3 py-2 text-right font-mono text-gray-400">{num(f.weth, 5)}</td>
+                    <td className="px-3 py-2 text-right font-mono text-gray-400">
+                      {num(f.quote, 5)} {f.quoteSymbol}
+                    </td>
                     <td className="px-3 py-2 text-right font-mono text-gray-600">{f.block}</td>
                   </tr>
                 ))}

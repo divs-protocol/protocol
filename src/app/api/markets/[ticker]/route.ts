@@ -1,14 +1,25 @@
 import { NextResponse } from "next/server";
-import { findMarket, poolAbi, usdPerShare, quoteToUsd } from "@/lib/exchange";
-import { cached, client, getSwapLogs, readEthUsd, spanLabel, type SwapLog } from "@/lib/chain";
+import {
+  findMarket,
+  poolAbi,
+  v4ManagerAbi,
+  v4StateSlot,
+  v4SlotHex,
+  v4PoolId,
+  v4DecodeSqrtPriceX96,
+  V4_POOL_MANAGER,
+  usdPerShare,
+  quoteToUsd,
+} from "@/lib/exchange";
+import { cached, client, getAllSwaps, readEthUsd, spanLabel, type NormalizedSwap } from "@/lib/chain";
 
 /**
  * One market's history and tape.
  *
- * A single pool supports a much longer range than all seventeen together, so a
- * token page can look further back than the index does. The response carries a
- * bucketed price series and a capped tape rather than the raw logs, which for
- * the busier pools run to megabytes.
+ * A single market supports a much longer range than the whole index together,
+ * so a token page can look further back than the index does. The response
+ * carries a bucketed price series and a capped tape rather than the raw logs,
+ * which for the busier markets run to megabytes.
  */
 
 export const dynamic = "force-dynamic";
@@ -65,6 +76,25 @@ export type MarketDetail = {
   sellVolume: number;
 };
 
+/** The market's current price straight from the chain, for a market too quiet to have a history to chart. */
+async function readCurrentSqrtPriceX96(m: NonNullable<ReturnType<typeof findMarket>>): Promise<bigint> {
+  if (m.venue === "v4") {
+    const word = (await client.readContract({
+      address: V4_POOL_MANAGER,
+      abi: v4ManagerAbi,
+      functionName: "extsload",
+      args: [v4SlotHex(v4StateSlot(v4PoolId(m)))],
+    })) as `0x${string}`;
+    return v4DecodeSqrtPriceX96(word);
+  }
+  const slot0 = (await client.readContract({
+    address: m.pool,
+    abi: poolAbi,
+    functionName: "slot0",
+  })) as readonly [bigint, ...unknown[]];
+  return slot0[0];
+}
+
 async function load(ticker: string, span: string): Promise<MarketDetail> {
   const m = findMarket(ticker);
   if (!m) throw new Error(`Unknown market ${ticker}`);
@@ -78,18 +108,18 @@ async function load(ticker: string, span: string): Promise<MarketDetail> {
   const asked = Math.max(0, LADDER.indexOf(requested));
   let rung = asked;
   let from = 0n;
-  let logs: SwapLog[] = [];
+  let swaps: NormalizedSwap[] = [];
 
   for (;;) {
     const blocks = LADDER[rung];
     from = head > blocks ? head - blocks : 0n;
-    logs = await getSwapLogs([m.pool], from, head);
-    if (logs.length >= MIN_SWAPS || rung >= LADDER.length - 1 || from === 0n) break;
+    swaps = await getAllSwaps([m], from, head);
+    if (swaps.length >= MIN_SWAPS || rung >= LADDER.length - 1 || from === 0n) break;
     rung += 1;
   }
 
-  // Only the ETH price is needed here; reading all ninety-eight pools again
-  // just to get it doubled the cost of opening a market.
+  // Only the ETH price is needed here; reading the whole index again just to
+  // get it doubled the cost of opening a market.
   const [ethUsd, headBlock, fromBlock] = await Promise.all([
     cached("ethUsd", 15_000, readEthUsd),
     client.getBlock({ blockNumber: head }),
@@ -99,11 +129,9 @@ async function load(ticker: string, span: string): Promise<MarketDetail> {
   const seconds = Number(headBlock.timestamp - fromBlock.timestamp);
   const perBlock = seconds / Math.max(1, Number(head - from));
 
-  const sorted = logs
+  const sorted = swaps
     .slice()
-    .sort((a: SwapLog, b: SwapLog) =>
-      a.blockNumber === b.blockNumber ? 0 : a.blockNumber < b.blockNumber ? -1 : 1,
-    );
+    .sort((a, b) => (a.blockNumber === b.blockNumber ? 0 : a.blockNumber < b.blockNumber ? -1 : 1));
 
   let buys = 0;
   let buyVolume = 0;
@@ -115,10 +143,10 @@ async function load(ticker: string, span: string): Promise<MarketDetail> {
   const width = (head - from) / BigInt(CANDLES) || 1n;
   const closes = new Map<number, { t: number; price: number }>();
 
-  for (const log of sorted) {
-    const quoteDelta = log.args.amount0 === undefined ? 0n : m.quoteIsToken0 ? log.args.amount0 : log.args.amount1!;
-    const shareDelta = m.quoteIsToken0 ? log.args.amount1! : log.args.amount0!;
-    const price = usdPerShare(m, log.args.sqrtPriceX96 ?? 0n, ethUsd);
+  for (const s of sorted) {
+    const quoteDelta = m.quoteIsToken0 ? s.amount0 : s.amount1;
+    const shareDelta = m.quoteIsToken0 ? s.amount1 : s.amount0;
+    const price = usdPerShare(m, s.sqrtPriceX96, ethUsd);
     const value = quoteToUsd(m, quoteDelta, ethUsd);
     const isBuy = quoteDelta > 0n;
 
@@ -129,8 +157,8 @@ async function load(ticker: string, span: string): Promise<MarketDetail> {
       sellVolume += value;
     }
 
-    closes.set(Number((log.blockNumber - from) / width), {
-      t: Number(headBlock.timestamp) - Number(head - log.blockNumber) * perBlock,
+    closes.set(Number((s.blockNumber - from) / width), {
+      t: Number(headBlock.timestamp) - Number(head - s.blockNumber) * perBlock,
       price,
     });
 
@@ -139,9 +167,12 @@ async function load(ticker: string, span: string): Promise<MarketDetail> {
       price,
       shares: Math.abs(Number(shareDelta)) / 1e18,
       value,
-      account: log.args.recipient ?? "0x",
-      hash: log.transactionHash,
-      secondsAgo: Number(head - log.blockNumber) * perBlock,
+      // The recipient for a V3 or V2 trade, the sender for a V4 one - see
+      // `normalizeV4` in chain.ts, which is the one venue without a
+      // recipient field on its own Swap event.
+      account: s.account,
+      hash: s.transactionHash,
+      secondsAgo: Number(head - s.blockNumber) * perBlock,
     });
   }
 
@@ -158,13 +189,9 @@ async function load(ticker: string, span: string): Promise<MarketDetail> {
 
   if (candles.length < 2) {
     quotedOnly = true;
-    const slot0 = (await client.readContract({
-      address: m.pool,
-      abi: poolAbi,
-      functionName: "slot0",
-    })) as readonly [bigint, ...unknown[]];
+    const sqrtPriceX96 = await readCurrentSqrtPriceX96(m);
 
-    const price = usdPerShare(m, slot0[0], ethUsd);
+    const price = usdPerShare(m, sqrtPriceX96, ethUsd);
     const end = Number(headBlock.timestamp);
     candles.length = 0;
     candles.push({ t: end - seconds, price }, { t: end, price });

@@ -16,7 +16,7 @@ import {
   useLiveMarkets,
   useMarketHistory,
 } from "@/lib/live";
-import { wethPerShare } from "@/lib/exchange";
+import { quotePerShare } from "@/lib/exchange";
 import {
   DEFAULT_FEE_BPS,
   ROUTER_ADDRESS,
@@ -214,14 +214,21 @@ function OrderEntry({ market }: { market: LiveMarket }) {
   const total = qty * market.price;
   const isBuy = side === "buy";
 
-  const wethPrice = wethPerShare(market, market.sqrtPriceX96);
+  /**
+   * The market's own quote asset - WETH for most, USDG for the rest.
+   * `wethPerShare` returns exactly 0 for a USDG market by design, which used
+   * to reach the guard below and silently no-op the buy button for every
+   * USDG-quoted market rather than trade it - about sixty tickers, more
+   * again once V4's mostly-USDG markets joined the registry.
+   */
+  const quotePrice = quotePerShare(market, market.sqrtPriceX96);
   const feeCost = total * (DEFAULT_FEE_BPS / 10_000);
-  const grossOut = isBuy ? qty : qty * wethPrice;
+  const grossOut = isBuy ? qty : qty * quotePrice;
   const minOut = grossOut * (1 - DEFAULT_FEE_BPS / 10_000) * (1 - slippage / 100);
 
   const submit = () => {
-    if (qty <= 0 || !wethPrice) return;
-    if (isBuy) trade.buy(market, qty * wethPrice, minOut);
+    if (qty <= 0 || !quotePrice) return;
+    if (isBuy) trade.buy(market, qty * quotePrice, minOut);
     else trade.sell(market, qty, minOut);
   };
 
@@ -313,7 +320,7 @@ function OrderEntry({ market }: { market: LiveMarket }) {
           <div className="flex justify-between">
             <span className="text-gray-500">Minimum received</span>
             <span className="font-mono text-gray-300">
-              {isBuy ? `${num(minOut, 4)} ${market.ticker}` : `${num(minOut, 6)} WETH`}
+              {isBuy ? `${num(minOut, 4)} ${market.ticker}` : `${num(minOut, 6)} ${market.quote}`}
             </span>
           </div>
         </div>

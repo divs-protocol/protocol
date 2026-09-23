@@ -282,7 +282,7 @@ function MarketRow({
   stat,
   onTrade,
 }: {
-  p: { market: (typeof MARKETS)[number]; usd: number };
+  p: { market: LiveMarket; usd: number };
   stat?: { change: number; volume: number };
   onTrade: (t: string) => void;
 }) {
@@ -331,7 +331,7 @@ function MarketColumn({
   onTrade,
 }: {
   tabs: [string, string][];
-  rowsFor: (tab: string) => { market: (typeof MARKETS)[number]; usd: number }[];
+  rowsFor: (tab: string) => { market: LiveMarket; usd: number }[];
   stats: Record<string, { change: number; volume: number }>;
   onTrade: (t: string) => void;
 }) {

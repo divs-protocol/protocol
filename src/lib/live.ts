@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { InsiderFeed, TickerInsiders } from "./insider";
-import { MARKETS, quoteDecimals, usdPerShare, type Market } from "./exchange";
+import { MARKETS, marketKey, quoteDecimals, usdPerShare, type MarketCommon } from "./exchange";
 
 /**
  * Live market data, read from the pools on Robinhood Chain.
@@ -73,7 +73,26 @@ export function spanLabel(seconds: number) {
 
 /* ---------------- server-computed snapshots ---------------- */
 
-export type LiveMarket = Market & {
+/**
+ * A market's identity plus its live numbers.
+ *
+ * Deliberately flat rather than `Market & {...}`: `Market` is a discriminated
+ * union so a V4 row has no `pool` field, only V3 and V2 do, and spreading a
+ * mixed array of those into one object literal collapses back to a union
+ * TypeScript cannot narrow per element. `pool` here is `marketKey(m)` - the
+ * pool or pair address for V3 and V2, the `PoolId` for V4 - which every venue
+ * has, so this never needs to know which one a given row came from.
+ */
+export type LiveMarket = {
+  ticker: string;
+  name: string;
+  kind: "stock" | "etf";
+  token: `0x${string}`;
+  venue: "v3" | "v2" | "v4";
+  pool: string;
+  feeBps: number;
+  quote: "WETH" | "USDG";
+  quoteIsToken0: boolean;
   /** USD, from the pool's marginal price and the WETH/USDG reference. */
   price: number;
   /** Percent, first to last trade in the window. */
@@ -152,7 +171,15 @@ export function useLiveMarkets(refreshMs = 15_000) {
       // Identity before numbers: the table renders its rows immediately and
       // fills them in, rather than appearing all at once.
       return MARKETS.map((m) => ({
-        ...m,
+        ticker: m.ticker,
+        name: m.name,
+        kind: m.kind,
+        token: m.token,
+        venue: m.venue,
+        pool: marketKey(m),
+        feeBps: m.feeBps,
+        quote: m.quote,
+        quoteIsToken0: m.quoteIsToken0,
         price: 0,
         change: 0,
         volume: 0,
@@ -287,7 +314,7 @@ const EMPTY_BOOK: Book = { bids: [], asks: [], mid: 0, spread: 0, spreadPct: 0, 
  * the book near spot - the part that prices an ordinary trade.
  */
 export function poolDepth(
-  m: Market,
+  m: MarketCommon,
   sqrtPriceX96: bigint,
   liquidity: bigint,
   ethUsd: number,

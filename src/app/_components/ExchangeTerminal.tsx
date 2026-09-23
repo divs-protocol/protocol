@@ -6,7 +6,26 @@ import { useAccount, usePublicClient, useReadContracts } from "wagmi";
 import { robinhood } from "wagmi/chains";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, ReferenceLine } from "recharts";
 import { ArrowDownUp, ArrowLeft, Search, Loader2 } from "lucide-react";
-import { MARKETS, type Market, ETH_USD_POOL, poolAbi, usdPerShare, wethPerShare, quoteDecimals, quoteToUsd, ethUsdFromSqrt } from "@/lib/exchange";
+import {
+  MARKETS,
+  type Market,
+  type V3Market,
+  type V4Market,
+  ETH_USD_POOL,
+  V4_POOL_MANAGER,
+  poolAbi,
+  v4ManagerAbi,
+  v4StateSlot,
+  v4SlotHex,
+  v4PoolId,
+  v4DecodeSqrtPriceX96,
+  v4DecodeLiquidity,
+  usdPerShare,
+  quotePerShare,
+  quoteDecimals,
+  quoteToUsd,
+  ethUsdFromSqrt,
+} from "@/lib/exchange";
 import { stockTokenAbi, toDisplayShares } from "@/lib/stockTokens";
 import {
   DEFAULT_FEE_BPS,
@@ -26,10 +45,24 @@ import Footer from "./Footer";
  * events. Period figures are computed from those events over a window measured
  * from real block timestamps, and labelled by that measurement - blocks here
  * are ~0.1s, so a lookback that looks large in blocks is only hours.
+ *
+ * This terminal reads pool state directly from the browser's own RPC
+ * connection rather than through the server snapshot `TradeSection` uses, so
+ * it carries its own venue split: V3's `slot0`/`liquidity` and V4's
+ * `extsload` reads against the one shared `PoolManager`, merged into the same
+ * `priced` list either way. V2 has no registry entries yet - see
+ * `src/lib/exchange.ts` for why - so there is nothing of that venue to read
+ * here either, not a gap in this file specifically.
  */
+const V4_MARKETS = MARKETS.filter((m): m is V4Market => m.venue === "v4");
 
 const SWAP_EVENT = parseAbiItem(
   "event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)",
+);
+
+/** The V4 singleton's Swap event - no `recipient`, only `sender`, and the pool is `id`, not the log's own address. */
+const V4_SWAP_EVENT = parseAbiItem(
+  "event Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 fee)",
 );
 
 const LOOKBACK_BLOCKS = 120_000n;
@@ -58,33 +91,64 @@ const ago = (s: number) =>
         ? `${Math.floor(s / 3600)}h`
         : `${Math.floor(s / 86400)}d`;
 
+const V3_MARKETS = MARKETS.filter((m): m is V3Market => m.venue === "v3");
+
 function usePrices() {
+  const v4Slot0Hex = useMemo(() => V4_MARKETS.map((m) => v4SlotHex(v4StateSlot(v4PoolId(m)))), []);
+  const v4LiquidityHex = useMemo(
+    () => V4_MARKETS.map((m) => v4SlotHex(v4StateSlot(v4PoolId(m)) + 3n)),
+    [],
+  );
+
   const contracts = useMemo(
     () => [
-      ...MARKETS.flatMap((m) => [
+      ...V3_MARKETS.flatMap((m) => [
         { address: m.pool, abi: poolAbi, functionName: "slot0", chainId: robinhood.id } as const,
         { address: m.pool, abi: poolAbi, functionName: "liquidity", chainId: robinhood.id } as const,
       ]),
+      ...v4Slot0Hex.map(
+        (slot) =>
+          ({ address: V4_POOL_MANAGER, abi: v4ManagerAbi, functionName: "extsload", args: [slot], chainId: robinhood.id }) as const,
+      ),
+      ...v4LiquidityHex.map(
+        (slot) =>
+          ({ address: V4_POOL_MANAGER, abi: v4ManagerAbi, functionName: "extsload", args: [slot], chainId: robinhood.id }) as const,
+      ),
       { address: ETH_USD_POOL, abi: poolAbi, functionName: "slot0", chainId: robinhood.id } as const,
     ],
-    [],
+    [v4Slot0Hex, v4LiquidityHex],
   );
 
   const { data, isLoading } = useReadContracts({ contracts, query: { refetchInterval: 12_000 } });
 
-  const ethRaw = data?.[MARKETS.length * 2]?.result as readonly unknown[] | undefined;
+  const n3 = V3_MARKETS.length;
+  const n4 = V4_MARKETS.length;
+  const v4Base = 2 * n3;
+
+  const ethRaw = data?.[v4Base + 2 * n4]?.result as readonly unknown[] | undefined;
   const ethUsd = ethRaw ? ethUsdFromSqrt(ethRaw[0] as bigint) : 0;
 
-  const priced = MARKETS.map((m, i) => {
+  const pricedV3 = V3_MARKETS.map((m, i) => {
     const slot0 = data?.[i * 2]?.result as readonly unknown[] | undefined;
     const liquidity = data?.[i * 2 + 1]?.result as bigint | undefined;
     const usd = slot0 ? usdPerShare(m, slot0[0] as bigint, ethUsd) : 0;
-    // wethPerShare returns 0 for a USDG market, which is what disables trading on it.
-    const weth = wethPerShare(m, (slot0?.[0] as bigint) ?? 0n);
-    return { market: m, weth, usd, liquidity };
+    // Quote-asset units, not USD - WETH for most markets, USDG for the rest.
+    // The trade panel spends and submits in this unit directly.
+    const quote = quotePerShare(m, (slot0?.[0] as bigint) ?? 0n);
+    return { market: m as Market, quote, usd, liquidity: liquidity ?? 0n };
   });
 
-  return { priced, ethUsd, isLoading };
+  const pricedV4 = V4_MARKETS.map((m, i) => {
+    const word0 = data?.[v4Base + i]?.result as `0x${string}` | undefined;
+    const sqrtPriceX96 = word0 ? v4DecodeSqrtPriceX96(word0) : 0n;
+    const liquidityWord = data?.[v4Base + n4 + i]?.result as `0x${string}` | undefined;
+    const liquidity = liquidityWord ? v4DecodeLiquidity(liquidityWord) : 0n;
+    const usd = sqrtPriceX96 ? usdPerShare(m, sqrtPriceX96, ethUsd) : 0;
+    const quote = quotePerShare(m, sqrtPriceX96);
+    return { market: m as Market, quote, usd, liquidity };
+  });
+
+  return { priced: [...pricedV3, ...pricedV4], ethUsd, isLoading };
 }
 
 function useSwaps(market: Market, ethUsd: number) {
@@ -103,8 +167,16 @@ function useSwaps(market: Market, ethUsd: number) {
         const head = await client.getBlockNumber();
         const from = head > LOOKBACK_BLOCKS ? head - LOOKBACK_BLOCKS : 0n;
 
-        const [logs, headBlock, fromBlock] = await Promise.all([
-          client.getLogs({ address: market.pool, event: SWAP_EVENT, fromBlock: from, toBlock: head }),
+        const [rawLogs, headBlock, fromBlock] = await Promise.all([
+          market.venue === "v4"
+            ? client.getLogs({
+                address: V4_POOL_MANAGER,
+                event: V4_SWAP_EVENT,
+                args: { id: [v4PoolId(market)] },
+                fromBlock: from,
+                toBlock: head,
+              })
+            : client.getLogs({ address: market.pool, event: SWAP_EVENT, fromBlock: from, toBlock: head }),
           client.getBlock({ blockNumber: head }),
           client.getBlock({ blockNumber: from }),
         ]);
@@ -115,11 +187,11 @@ function useSwaps(market: Market, ethUsd: number) {
         const perBlock = spanSeconds / Number(head - from);
         if (!cancelled) setWindowSeconds(spanSeconds);
 
-        const out: Trade[] = logs.map((l, i) => {
-          const a = l.args;
-          const price = usdPerShare(market, a.sqrtPriceX96 as bigint, ethUsd);
-          const amt0 = a.amount0 as bigint;
-          const amt1 = a.amount1 as bigint;
+        const out: Trade[] = rawLogs.map((l, i) => {
+          const a = l.args as { sqrtPriceX96?: bigint; amount0?: bigint | number; amount1?: bigint | number };
+          const price = usdPerShare(market, a.sqrtPriceX96 ?? 0n, ethUsd);
+          const amt0 = BigInt(a.amount0 ?? 0);
+          const amt1 = BigInt(a.amount1 ?? 0);
           const quoteAmt = market.quoteIsToken0 ? amt0 : amt1;
           const shareAmt = market.quoteIsToken0 ? amt1 : amt0;
           const abs = (v: bigint) => (v < 0n ? -v : v);
@@ -181,7 +253,7 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
   const { settling } = useWalletStatus();
   const { priced, ethUsd, isLoading } = usePrices();
 
-  const [ticker, setTicker] = useState(initialTicker ?? MARKETS[0].ticker);
+  const [ticker, setTicker] = useState(initialTicker ?? V3_MARKETS[0].ticker);
   const [q, setQ] = useState("");
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
@@ -254,15 +326,16 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
 
   /*
    * The amount is entered in shares either way, so a buy spends shares x price
-   * in WETH and a sell returns it. The quote is the pool's marginal price less
-   * the protocol fee; the minimum submitted on-chain is that less slippage.
+   * in the market's own quote asset - WETH for most, USDG for the rest - and
+   * a sell returns it. The quote is the pool's marginal price less the
+   * protocol fee; the minimum submitted on-chain is that less slippage.
    */
-  const grossOut = side === "buy" ? qty : qty * (active?.weth ?? 0);
+  const grossOut = side === "buy" ? qty : qty * (active?.quote ?? 0);
   const minOut = grossOut * (1 - DEFAULT_FEE_BPS / 10_000) * (1 - slippage / 100);
 
   const submit = () => {
     if (!active || qty <= 0) return;
-    if (side === "buy") trade.buy(active.market, qty * active.weth, minOut);
+    if (side === "buy") trade.buy(active.market, qty * active.quote, minOut);
     else trade.sell(active.market, qty, minOut);
   };
 
@@ -295,7 +368,7 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
           <div>
             <div className="text-white font-bold text-sm tracking-tight leading-none">
               {active.market.ticker}
-              <span className="text-gray-600 font-normal"> / WETH</span>
+              <span className="text-gray-600 font-normal"> / {active.market.quote}</span>
             </div>
             <div className="text-[10px] text-gray-500 mt-1">{active.market.name}</div>
           </div>
@@ -305,7 +378,9 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
           <div className="font-mono text-xl text-white leading-none">
             {active.usd ? usd(active.usd) : <span className="text-gray-600">-</span>}
           </div>
-          <div className="text-[10px] text-gray-500 font-mono mt-1">{num(active.weth, 6)} WETH</div>
+          <div className="text-[10px] text-gray-500 font-mono mt-1">
+            {num(active.quote, 6)} {active.market.quote}
+          </div>
         </div>
 
         {headline.map(([label, value, cls]) => (
@@ -460,7 +535,7 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
             <div className="bg-[#14161B] border border-[#232730] rounded-xl px-3 py-2.5">
               <div className="text-[10px] text-gray-500 mb-1">You {side === "buy" ? "pay" : "receive"}</div>
               <div className="font-mono text-lg text-white">
-                {qty > 0 && active.weth ? `${num(qty * active.weth, 6)} WETH` : <span className="text-gray-600">-</span>}
+                {qty > 0 && active.quote ? `${num(qty * active.quote, 6)} ${active.market.quote}` : <span className="text-gray-600">-</span>}
               </div>
               {qty > 0 && active.usd > 0 && (
                 <div className="text-[10px] text-gray-600 font-mono mt-0.5">{usd(qty * active.usd)}</div>
@@ -484,7 +559,7 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
                   {qty > 0
                     ? side === "buy"
                       ? `${num(minOut, 4)} ${active.market.ticker}`
-                      : `${num(minOut, 6)} WETH`
+                      : `${num(minOut, 6)} ${active.market.quote}`
                     : "-"}
                 </span>
               </div>
@@ -546,7 +621,7 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
                 <th className="px-3 py-2 text-left font-semibold">Side</th>
                 <th className="px-3 py-2 text-right font-semibold">Price</th>
                 <th className="px-3 py-2 text-right font-semibold">Shares</th>
-                <th className="px-3 py-2 text-right font-semibold">WETH</th>
+                <th className="px-3 py-2 text-right font-semibold">{active.market.quote}</th>
                 <th className="px-3 py-2 text-right font-semibold">Block</th>
                 <th className="px-3 py-2 text-right font-semibold">Age</th>
               </tr>

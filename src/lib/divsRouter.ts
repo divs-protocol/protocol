@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { robinhood } from "wagmi/chains";
-import { USDG, quoteDecimals, quotePerShare, type Market } from "./exchange";
+import { USDG, findMarket, quoteDecimals, quotePerShare, type Market, type MarketCommon, type V4Market } from "./exchange";
 
 /**
  * Binding for DivsRouter.sol.
@@ -11,12 +11,29 @@ import { USDG, quoteDecimals, quotePerShare, type Market } from "./exchange";
  * The address comes from the environment because nothing is deployed yet. When
  * it is unset the trade panels still render live prices and quotes, but the
  * submit button says so rather than failing when tapped.
+ *
+ * `buy`/`sell` take an object with a `ticker`, not a full `Market` - a caller
+ * usually only has a `LiveMarket` (identity plus live numbers, flat, no
+ * venue-specific fields) on hand, not the registry entry itself. The real
+ * `Market`, with the pool address or `PoolKey` a trade actually needs, is
+ * looked up here from the static registry rather than trusted from the
+ * caller, so a stale or reshaped row passed in can never send a trade to the
+ * wrong venue.
  */
 
 const addr = (v: string | undefined) =>
   v && /^0x[a-fA-F0-9]{40}$/.test(v) ? (v as `0x${string}`) : undefined;
 
 export const ROUTER_ADDRESS = addr(process.env.NEXT_PUBLIC_DIVS_ROUTER_ADDRESS);
+
+/** A V4 PoolKey, as the ABI encodes it. */
+const poolKeyComponents = [
+  { name: "currency0", type: "address" },
+  { name: "currency1", type: "address" },
+  { name: "fee", type: "uint24" },
+  { name: "tickSpacing", type: "int24" },
+  { name: "hooks", type: "address" },
+] as const;
 
 export const routerAbi = [
   {
@@ -48,6 +65,78 @@ export const routerAbi = [
     stateMutability: "nonpayable",
     inputs: [
       { name: "pool", type: "address" },
+      { name: "amountIn", type: "uint256" },
+      { name: "amountOutMin", type: "uint256" },
+      { name: "recipient", type: "address" },
+      { name: "unwrap", type: "bool" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "buyV2",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "pair", type: "address" },
+      { name: "amountIn", type: "uint256" },
+      { name: "amountOutMin", type: "uint256" },
+      { name: "recipient", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "buyWithETHV2",
+    stateMutability: "payable",
+    inputs: [
+      { name: "pair", type: "address" },
+      { name: "amountOutMin", type: "uint256" },
+      { name: "recipient", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "sellV2",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "pair", type: "address" },
+      { name: "amountIn", type: "uint256" },
+      { name: "amountOutMin", type: "uint256" },
+      { name: "recipient", type: "address" },
+      { name: "unwrap", type: "bool" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "buyV4",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "key", type: "tuple", components: poolKeyComponents },
+      { name: "amountIn", type: "uint256" },
+      { name: "amountOutMin", type: "uint256" },
+      { name: "recipient", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "buyWithETHV4",
+    stateMutability: "payable",
+    inputs: [
+      { name: "key", type: "tuple", components: poolKeyComponents },
+      { name: "amountOutMin", type: "uint256" },
+      { name: "recipient", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "sellV4",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "key", type: "tuple", components: poolKeyComponents },
       { name: "amountIn", type: "uint256" },
       { name: "amountOutMin", type: "uint256" },
       { name: "recipient", type: "address" },
@@ -101,14 +190,14 @@ export const SLIPPAGE_OPTIONS = [0.1, 0.5, 1] as const;
  * itself - which is why the submitted minimum is this figure less slippage
  * rather than this figure.
  */
-export function quoteBuy(m: Market, sqrtPriceX96: bigint, quoteIn: number, feeBps = DEFAULT_FEE_BPS) {
+export function quoteBuy(m: MarketCommon, sqrtPriceX96: bigint, quoteIn: number, feeBps = DEFAULT_FEE_BPS) {
   const price = quotePerShare(m, sqrtPriceX96);
   if (!price) return 0;
   return (quoteIn * (1 - feeBps / 10_000)) / price;
 }
 
 /** Quote asset received for a number of shares, after the protocol fee. */
-export function quoteSell(m: Market, sqrtPriceX96: bigint, shares: number, feeBps = DEFAULT_FEE_BPS) {
+export function quoteSell(m: MarketCommon, sqrtPriceX96: bigint, shares: number, feeBps = DEFAULT_FEE_BPS) {
   const price = quotePerShare(m, sqrtPriceX96);
   return shares * price * (1 - feeBps / 10_000);
 }
@@ -116,8 +205,17 @@ export function quoteSell(m: Market, sqrtPriceX96: bigint, shares: number, feeBp
 const toWei = (n: number) => BigInt(Math.floor(n * 1e18));
 
 /** Amounts of the quote asset are not always eighteen decimals. USDG is six. */
-const toQuoteUnits = (m: Market, n: number) =>
+const toQuoteUnits = (m: MarketCommon, n: number) =>
   BigInt(Math.floor(n * 10 ** quoteDecimals(m)));
+
+/** The tuple `buyV4`/`sellV4` take in place of a pool address. */
+const v4Key = (m: V4Market) => ({
+  currency0: m.currency0,
+  currency1: m.currency1,
+  fee: m.feeBps,
+  tickSpacing: m.tickSpacing,
+  hooks: m.hooks,
+});
 
 export type TradeStatus = "idle" | "approving" | "pending" | "confirming" | "done" | "error";
 
@@ -127,7 +225,9 @@ export type TradeStatus = "idle" | "approving" | "pending" | "confirming" | "don
  * Buys take the native-ETH path: the router wraps on the way in, so a purchase
  * is one transaction with no approval. Sells move a stock token, so they need
  * an allowance first, and that is only requested when the current one is too
- * small.
+ * small. Both branch on venue only after resolving the full `Market` from the
+ * registry - see the module doc comment for why that lookup happens here
+ * rather than trusting the caller's own object.
  */
 export function useRouterTrade() {
   const { address } = useAccount();
@@ -153,6 +253,11 @@ export function useRouterTrade() {
       "Too little received",
       "Zero amount",
       "No output",
+      "No liquidity",
+      "Unsupported pair",
+      "Not WETH quoted",
+      "Hook not allowed",
+      "V4 unset",
       "Unexpected callback",
       "User rejected",
       "insufficient funds",
@@ -167,20 +272,44 @@ export function useRouterTrade() {
    * an allowance first, and only when the current one is too small.
    */
   const buy = useCallback(
-    async (market: Market, quoteIn: number, minSharesOut: number) => {
-      if (!ROUTER_ADDRESS || !address || !client) return;
+    async (marketRef: { ticker: string }, quoteIn: number, minSharesOut: number) => {
+      const market = findMarket(marketRef.ticker) as Market | undefined;
+      if (!ROUTER_ADDRESS || !address || !client || !market) return;
       reset();
       try {
         if (market.quote === "WETH") {
           setStatus("pending");
-          const tx = await writeContractAsync({
-            address: ROUTER_ADDRESS,
-            abi: routerAbi,
-            functionName: "buyWithETH",
-            args: [market.pool, toWei(minSharesOut), address],
-            value: toWei(quoteIn),
-            chainId: robinhood.id,
-          });
+          // Each venue's ETH-in call is fully typed against its own ABI entry
+          // rather than dispatched through one shared shape - the one place
+          // this file spends extra lines is the one place a mismatched
+          // argument would misroute a trade.
+          const tx =
+            market.venue === "v3"
+              ? await writeContractAsync({
+                  address: ROUTER_ADDRESS,
+                  abi: routerAbi,
+                  functionName: "buyWithETH",
+                  args: [market.pool, toWei(minSharesOut), address],
+                  value: toWei(quoteIn),
+                  chainId: robinhood.id,
+                })
+              : market.venue === "v2"
+                ? await writeContractAsync({
+                    address: ROUTER_ADDRESS,
+                    abi: routerAbi,
+                    functionName: "buyWithETHV2",
+                    args: [market.pool, toWei(minSharesOut), address],
+                    value: toWei(quoteIn),
+                    chainId: robinhood.id,
+                  })
+                : await writeContractAsync({
+                    address: ROUTER_ADDRESS,
+                    abi: routerAbi,
+                    functionName: "buyWithETHV4",
+                    args: [v4Key(market), toWei(minSharesOut), address],
+                    value: toWei(quoteIn),
+                    chainId: robinhood.id,
+                  });
           setHash(tx);
           setStatus("confirming");
           await client.waitForTransactionReceipt({ hash: tx });
@@ -209,13 +338,30 @@ export function useRouterTrade() {
         }
 
         setStatus("pending");
-        const tx = await writeContractAsync({
-          address: ROUTER_ADDRESS,
-          abi: routerAbi,
-          functionName: "buy",
-          args: [market.pool, amount, toWei(minSharesOut), address],
-          chainId: robinhood.id,
-        });
+        const tx =
+          market.venue === "v3"
+            ? await writeContractAsync({
+                address: ROUTER_ADDRESS,
+                abi: routerAbi,
+                functionName: "buy",
+                args: [market.pool, amount, toWei(minSharesOut), address],
+                chainId: robinhood.id,
+              })
+            : market.venue === "v2"
+              ? await writeContractAsync({
+                  address: ROUTER_ADDRESS,
+                  abi: routerAbi,
+                  functionName: "buyV2",
+                  args: [market.pool, amount, toWei(minSharesOut), address],
+                  chainId: robinhood.id,
+                })
+              : await writeContractAsync({
+                  address: ROUTER_ADDRESS,
+                  abi: routerAbi,
+                  functionName: "buyV4",
+                  args: [v4Key(market), amount, toWei(minSharesOut), address],
+                  chainId: robinhood.id,
+                });
         setHash(tx);
         setStatus("confirming");
         await client.waitForTransactionReceipt({ hash: tx });
@@ -228,8 +374,9 @@ export function useRouterTrade() {
   );
 
   const sell = useCallback(
-    async (market: Market, shares: number, minQuoteOut: number, unwrap = true) => {
-      if (!ROUTER_ADDRESS || !address || !client) return;
+    async (marketRef: { ticker: string }, shares: number, minQuoteOut: number, unwrap = true) => {
+      const market = findMarket(marketRef.ticker) as Market | undefined;
+      if (!ROUTER_ADDRESS || !address || !client || !market) return;
       reset();
       const amount = toWei(shares);
       try {
@@ -253,20 +400,33 @@ export function useRouterTrade() {
         }
 
         setStatus("pending");
-        const tx = await writeContractAsync({
-          address: ROUTER_ADDRESS,
-          abi: routerAbi,
-          functionName: "sell",
-          // Unwrapping to ether is only possible on a WETH-quoted market.
-          args: [
-            market.pool,
-            amount,
-            toQuoteUnits(market, minQuoteOut),
-            address,
-            unwrap && market.quote === "WETH",
-          ],
-          chainId: robinhood.id,
-        });
+        // Unwrapping to ether is only possible on a WETH-quoted market.
+        const unwrapToEth = unwrap && market.quote === "WETH";
+        const minOut = toQuoteUnits(market, minQuoteOut);
+        const tx =
+          market.venue === "v3"
+            ? await writeContractAsync({
+                address: ROUTER_ADDRESS,
+                abi: routerAbi,
+                functionName: "sell",
+                args: [market.pool, amount, minOut, address, unwrapToEth],
+                chainId: robinhood.id,
+              })
+            : market.venue === "v2"
+              ? await writeContractAsync({
+                  address: ROUTER_ADDRESS,
+                  abi: routerAbi,
+                  functionName: "sellV2",
+                  args: [market.pool, amount, minOut, address, unwrapToEth],
+                  chainId: robinhood.id,
+                })
+              : await writeContractAsync({
+                  address: ROUTER_ADDRESS,
+                  abi: routerAbi,
+                  functionName: "sellV4",
+                  args: [v4Key(market), amount, minOut, address, unwrapToEth],
+                  chainId: robinhood.id,
+                });
         setHash(tx);
         setStatus("confirming");
         await client.waitForTransactionReceipt({ hash: tx });

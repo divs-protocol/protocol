@@ -57,14 +57,32 @@ const word = (data, i) => data.slice(2 + i * 64, 2 + (i + 1) * 64);
 const stateSlot = (id) =>
   BigInt(keccak256(encodeAbiParameters(parseAbiParameters("bytes32, uint256"), [id, POOLS_SLOT])));
 
-async function rpc(method, params) {
+/**
+ * Retries a 429 with backoff rather than surfacing it as "no pool" - the
+ * earlier version of this script had no retry, and a run late in the token
+ * list would get rate-limited hard enough that most of it came back "Too
+ * Many Requests," silently undercounting real V4 liquidity rather than
+ * failing loudly.
+ */
+async function rpc(method, params, attempt = 0) {
   const r = await fetch(RPC, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
   });
+  if (r.status === 429) {
+    if (attempt >= 6) throw new Error("Too Many Requests (out of retries)");
+    await new Promise((res) => setTimeout(res, 400 * 2 ** attempt));
+    return rpc(method, params, attempt + 1);
+  }
   const j = await r.json();
-  if (j.error) throw new Error(j.error.message);
+  if (j.error) {
+    if (/too many requests|rate limit/i.test(j.error.message) && attempt < 6) {
+      await new Promise((res) => setTimeout(res, 400 * 2 ** attempt));
+      return rpc(method, params, attempt + 1);
+    }
+    throw new Error(j.error.message);
+  }
   return j.result;
 }
 
@@ -106,7 +124,9 @@ function listed() {
   const src = fs.readFileSync(path.join(DIR, "..", "src", "lib", "exchange.ts"), "utf8");
   const out = new Set();
   for (const line of src.split("\n")) {
-    const m = line.match(/\{ ticker: "([^"]+)"/);
+    // ticker: is no longer the first field - venue: leads every row since the
+    // registry became venue-aware, so this can't anchor on the opening brace.
+    const m = line.match(/ticker: "([^"]+)"/);
     if (m) out.add(m[1]);
   }
   return out;
@@ -176,6 +196,43 @@ console.log();
 if (missing.length) {
   console.log("Tradeable on V4 today, absent from DIVS:");
   console.log(missing.sort((a, b) => (b.liquidity > a.liquidity ? 1 : -1)).map((b) => b.symbol).join(" "));
+  console.log();
+
+  // Only these are immediately listable - a hooked pool runs arbitrary code
+  // on every swap through it, so it stays off the registry until someone has
+  // actually reviewed that hook and the router owner has allowlisted it.
+  const hookless = missing.filter((b) => /^0x0+$/.test(b.hooks));
+  console.log(`Hookless and absent - listable now: ${hookless.length}`);
+  console.log(
+    hookless
+      .sort((a, b) => (b.liquidity > a.liquidity ? 1 : -1))
+      .map((b) => `${b.symbol.padEnd(7)} ${b.quote.padEnd(4)} fee=${b.fee.toString().padStart(6)} liquidity=${b.liquidity} ${b.other}`)
+      .join("\n"),
+  );
+  console.log();
+
+  // Ready to paste into MARKETS in src/lib/exchange.ts - the token's own
+  // name and kind come from tokens.json, everything else from the pool this
+  // scan already found.
+  const byTicker = new Map(tokens.map((t) => [t.symbol, t]));
+  const known = JSON.parse(fs.readFileSync(path.join(DIR, "tokens.json"), "utf8"));
+  const meta = new Map((Array.isArray(known) ? known : []).map((t) => [t.ticker ?? t.symbol, t]));
+  console.log("Registry rows for the hookless set:");
+  for (const b of hookless.sort((a, c) => (c.liquidity > a.liquidity ? 1 : -1))) {
+    const t = meta.get(b.symbol) ?? byTicker.get(b.symbol);
+    const name = t?.name ?? b.symbol;
+    const kind = t?.kind ?? "stock";
+    const token = t?.token ?? t?.address;
+    const quoteIsToken0 = b.currency0.toLowerCase() === (b.quote === "WETH" ? WETH : USDG).toLowerCase();
+    // Addresses come off raw event topics, lowercase, not checksummed - the
+    // same mistake the registry's own header warns about: one bad checksum
+    // here breaks the whole multicall batch, not just this row.
+    console.log(
+      `  { venue: "v4", ticker: "${b.symbol}", name: "${name}", kind: "${kind}", token: "${getAddress(token)}", ` +
+        `feeBps: ${b.fee}, quote: "${b.quote}", quoteIsToken0: ${quoteIsToken0}, ` +
+        `currency0: "${getAddress(b.currency0)}", currency1: "${getAddress(b.currency1)}", tickSpacing: ${b.tickSpacing}, hooks: "${getAddress(b.hooks)}" },`,
+    );
+  }
   console.log();
 }
 
