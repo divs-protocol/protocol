@@ -325,17 +325,28 @@ function OrderEntry({ market }: { market: LiveMarket }) {
           </div>
         </div>
 
-        <button
-          onClick={() => (isConnected ? submit() : openWallet())}
-          disabled={isConnected && (trade.busy || !ROUTER_ADDRESS || qty <= 0)}
-          className={`w-full py-2.5 rounded-xl text-[11px] font-bold transition disabled:opacity-40 disabled:cursor-not-allowed ${
-            isBuy ? "bg-[#10B981] hover:bg-[#0EA372] text-black" : "bg-red-500 hover:bg-red-600 text-white"
-          }`}
-        >
-          {!isConnected
-            ? "Connect wallet"
-            : (trade.label ?? `${isBuy ? "Buy" : "Sell"} ${market.ticker}`)}
-        </button>
+        {/* A V4 market prices and charts fine straight off the pool manager,
+            but the deployed router predates V2/V4 support - see
+            `useV4Available` in divsRouter.ts. Checked, not assumed, so this
+            clears itself the moment the router is actually upgraded. */}
+        {(() => {
+          const v4Blocked = market.venue === "v4" && !trade.v4Available;
+          return (
+            <button
+              onClick={() => (isConnected ? submit() : openWallet())}
+              disabled={isConnected && (trade.busy || !ROUTER_ADDRESS || qty <= 0 || v4Blocked)}
+              className={`w-full py-2.5 rounded-xl text-[11px] font-bold transition disabled:opacity-40 disabled:cursor-not-allowed ${
+                isBuy ? "bg-[#10B981] hover:bg-[#0EA372] text-black" : "bg-red-500 hover:bg-red-600 text-white"
+              }`}
+            >
+              {!isConnected
+                ? "Connect wallet"
+                : v4Blocked
+                  ? "V4 trading opens soon"
+                  : (trade.label ?? `${isBuy ? "Buy" : "Sell"} ${market.ticker}`)}
+            </button>
+          );
+        })()}
 
         {trade.error && <p className="text-[10px] text-red-400 text-center">{trade.error}</p>}
         {trade.status === "done" && (

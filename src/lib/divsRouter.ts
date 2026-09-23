@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useAccount, usePublicClient, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 import { robinhood } from "wagmi/chains";
 import { USDG, findMarket, quoteDecimals, quotePerShare, type Market, type MarketCommon, type V4Market } from "./exchange";
 
@@ -145,6 +145,9 @@ export const routerAbi = [
     outputs: [{ type: "uint256" }],
   },
   { type: "function", name: "feeBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  // Absent from the router deployed before V2/V4 support - a call to it
+  // there simply fails, which `useV4Available` below reads as "not yet".
+  { type: "function", name: "poolManager", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
   { type: "function", name: "pendingFees", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
 ] as const;
 
@@ -229,10 +232,30 @@ export type TradeStatus = "idle" | "approving" | "pending" | "confirming" | "don
  * registry - see the module doc comment for why that lookup happens here
  * rather than trusting the caller's own object.
  */
+/**
+ * Whether the deployed router actually has V4 support, checked rather than
+ * assumed. `poolManager()` only exists on the router built with V2/V4
+ * support; a call to it on an older deployment simply fails - read here as
+ * "not yet" rather than left to surface as a failed transaction once someone
+ * taps Buy on a V4 market. This also means V4 trading unlocks itself the
+ * moment the router is redeployed, with no code change to flip a flag back.
+ */
+function useV4Available() {
+  const { data } = useReadContract({
+    address: ROUTER_ADDRESS,
+    abi: routerAbi,
+    functionName: "poolManager",
+    chainId: robinhood.id,
+    query: { enabled: Boolean(ROUTER_ADDRESS) },
+  });
+  return Boolean(data && data !== "0x0000000000000000000000000000000000000000");
+}
+
 export function useRouterTrade() {
   const { address } = useAccount();
   const client = usePublicClient({ chainId: robinhood.id });
   const { writeContractAsync } = useWriteContract();
+  const v4Available = useV4Available();
 
   const [status, setStatus] = useState<TradeStatus>("idle");
   const [hash, setHash] = useState<`0x${string}` | undefined>();
@@ -275,6 +298,12 @@ export function useRouterTrade() {
     async (marketRef: { ticker: string }, quoteIn: number, minSharesOut: number) => {
       const market = findMarket(marketRef.ticker) as Market | undefined;
       if (!ROUTER_ADDRESS || !address || !client || !market) return;
+      if (market.venue === "v4" && !v4Available) {
+        reset();
+        setError("V4 trading opens once the router is upgraded");
+        setStatus("error");
+        return;
+      }
       reset();
       try {
         if (market.quote === "WETH") {
@@ -370,13 +399,19 @@ export function useRouterTrade() {
         fail(e);
       }
     },
-    [address, client, writeContractAsync, reset, fail],
+    [address, client, writeContractAsync, reset, fail, v4Available],
   );
 
   const sell = useCallback(
     async (marketRef: { ticker: string }, shares: number, minQuoteOut: number, unwrap = true) => {
       const market = findMarket(marketRef.ticker) as Market | undefined;
       if (!ROUTER_ADDRESS || !address || !client || !market) return;
+      if (market.venue === "v4" && !v4Available) {
+        reset();
+        setError("V4 trading opens once the router is upgraded");
+        setStatus("error");
+        return;
+      }
       reset();
       const amount = toWei(shares);
       try {
@@ -435,7 +470,7 @@ export function useRouterTrade() {
         fail(e);
       }
     },
-    [address, client, writeContractAsync, reset, fail],
+    [address, client, writeContractAsync, reset, fail, v4Available],
   );
 
   const busy = status === "approving" || status === "pending" || status === "confirming";
@@ -448,7 +483,7 @@ export function useRouterTrade() {
     return undefined;
   }, [status]);
 
-  return { ready, busy, status, hash, error, label, buy, sell, reset };
+  return { ready, busy, status, hash, error, label, buy, sell, reset, v4Available };
 }
 
 export { WETH } from "./exchange";

@@ -820,22 +820,31 @@ export default function AppShell({ section }: { section: string }) {
                         <span className="text-[#10B981] font-extrabold text-sm">{px(orderTotal)}</span>
                       </div>
 
-                      <button
-                        onClick={() => (isConnected ? submitTrade() : openWallet())}
-                        disabled={isConnected && (trade.busy || !ROUTER_ADDRESS || orderQty <= 0)}
-                        className={`w-full disabled:opacity-40 disabled:cursor-not-allowed font-extrabold py-2 rounded-xl transition ${
-                          side === "sell" && isConnected
-                            ? "bg-red-500 hover:bg-red-600 text-white"
-                            : "bg-[#10B981] hover:bg-[#0EA372] text-black"
-                        }`}
-                      >
-                        {!isConnected
-                          ? settling
-                            ? "Connecting…"
-                            : "Connect Wallet"
-                          : (trade.label ??
-                            `${side === "buy" ? "Buy" : "Sell"} ${selected?.ticker ?? ""}`)}
-                      </button>
+                      {/* The deployed router predates V2/V4 support - see
+                          `useV4Available` in divsRouter.ts. Checked, not assumed. */}
+                      {(() => {
+                        const v4Blocked = selected?.venue === "v4" && !trade.v4Available;
+                        return (
+                          <button
+                            onClick={() => (isConnected ? submitTrade() : openWallet())}
+                            disabled={isConnected && (trade.busy || !ROUTER_ADDRESS || orderQty <= 0 || v4Blocked)}
+                            className={`w-full disabled:opacity-40 disabled:cursor-not-allowed font-extrabold py-2 rounded-xl transition ${
+                              side === "sell" && isConnected
+                                ? "bg-red-500 hover:bg-red-600 text-white"
+                                : "bg-[#10B981] hover:bg-[#0EA372] text-black"
+                            }`}
+                          >
+                            {!isConnected
+                              ? settling
+                                ? "Connecting…"
+                                : "Connect Wallet"
+                              : v4Blocked
+                                ? "V4 trading opens soon"
+                                : (trade.label ??
+                                  `${side === "buy" ? "Buy" : "Sell"} ${selected?.ticker ?? ""}`)}
+                          </button>
+                        );
+                      })()}
 
                       {trade.error && (
                         <p className="mt-2 text-[10px] text-red-400 text-center">{trade.error}</p>

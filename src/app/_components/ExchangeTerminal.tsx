@@ -581,19 +581,28 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
               </div>
             </div>
 
-            <button
-              onClick={() => (isConnected ? submit() : openWallet())}
-              disabled={isConnected && (trade.busy || !ROUTER_ADDRESS || qty <= 0)}
-              className={`w-full py-3 rounded-xl text-[11px] font-bold transition disabled:opacity-30 disabled:cursor-not-allowed ${
-                side === "buy" ? "bg-[#10B981] hover:bg-[#0EA372] text-black" : "bg-red-500 hover:bg-red-600 text-white"
-              }`}
-            >
-              {!isConnected
-                ? settling
-                  ? "Connecting…"
-                  : "Connect wallet"
-                : (trade.label ?? `${side === "buy" ? "Buy" : "Sell"} ${active.market.ticker}`)}
-            </button>
+            {/* The deployed router predates V2/V4 support - see
+                `useV4Available` in divsRouter.ts. Checked, not assumed. */}
+            {(() => {
+              const v4Blocked = active.market.venue === "v4" && !trade.v4Available;
+              return (
+                <button
+                  onClick={() => (isConnected ? submit() : openWallet())}
+                  disabled={isConnected && (trade.busy || !ROUTER_ADDRESS || qty <= 0 || v4Blocked)}
+                  className={`w-full py-3 rounded-xl text-[11px] font-bold transition disabled:opacity-30 disabled:cursor-not-allowed ${
+                    side === "buy" ? "bg-[#10B981] hover:bg-[#0EA372] text-black" : "bg-red-500 hover:bg-red-600 text-white"
+                  }`}
+                >
+                  {!isConnected
+                    ? settling
+                      ? "Connecting…"
+                      : "Connect wallet"
+                    : v4Blocked
+                      ? "V4 trading opens soon"
+                      : (trade.label ?? `${side === "buy" ? "Buy" : "Sell"} ${active.market.ticker}`)}
+                </button>
+              );
+            })()}
 
             {trade.error && <p className="text-[10px] text-red-400 text-center">{trade.error}</p>}
             {trade.status === "done" && (
