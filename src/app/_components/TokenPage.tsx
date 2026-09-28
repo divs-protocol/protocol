@@ -14,6 +14,7 @@ import {
   usd,
   useMarketHistory,
 } from "@/lib/live";
+import { DIVSPRO_TRADE_URL, useDivsProHistory } from "@/lib/divspro";
 import Footer from "./Footer";
 import { TickerInsiderPanel } from "./InsiderPanel";
 
@@ -113,6 +114,30 @@ function TradePanel({ market }: { market: LiveMarket }) {
   );
 }
 
+/**
+ * DIVSPRO trades on a Pons bonding-curve vault, not a pool DivsRouter can
+ * call - see src/lib/divspro.ts. So no order ticket here, just where the
+ * trade actually happens.
+ */
+function ExternalTradePanel() {
+  return (
+    <div className="bg-[#1B1E24] border border-[#232730] rounded-2xl p-4 space-y-3">
+      <div className="text-[11px] text-gray-400 leading-relaxed">
+        $DIVSPRO is on a Pons bonding curve, not a pool DIVS Router can fill.
+        Trading happens on Pons directly.
+      </div>
+      <a
+        href={DIVSPRO_TRADE_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="block w-full text-center py-3 rounded-xl text-xs font-bold bg-[#10B981] hover:bg-[#0EA372] text-black transition"
+      >
+        Trade on Pons
+      </a>
+    </div>
+  );
+}
+
 export default function TokenPage({
   market,
   onBack,
@@ -124,6 +149,11 @@ export default function TokenPage({
   const [tab, setTab] = useState<"all" | "buys" | "sells">("all");
   const [copied, setCopied] = useState(false);
 
+  const isDivsPro = market.ticker === "DIVSPRO";
+  // Both hooks run unconditionally (Rules of Hooks); each fetches nothing
+  // when its ticker/span is undefined, so the inactive one is a no-op.
+  const uniswapHistory = useMarketHistory(isDivsPro ? undefined : market.ticker, span);
+  const divsProHistory = useDivsProHistory(isDivsPro ? span : undefined);
   const {
     trades,
     candles,
@@ -135,7 +165,11 @@ export default function TokenPage({
     buyVolume,
     sellVolume,
     loading,
-  } = useMarketHistory(market.ticker, span);
+  } = isDivsPro ? divsProHistory : uniswapHistory;
+  // Only divsProHistory carries this - the shared MarketDetail shape has no
+  // per-window fee figure, because that comes from the market index for
+  // every other ticker instead of this route.
+  const divsProFees = isDivsPro ? divsProHistory.feesUsd : 0;
 
   const visible = useMemo(
     () =>
@@ -204,7 +238,7 @@ export default function TokenPage({
               <div className="flex items-center gap-2">
                 <h2 className="text-white font-bold text-lg tracking-tight">{market.ticker}</h2>
                 <span className="px-2 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wide bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/25">
-                  {(market.feeBps / 10_000).toFixed(2)}% pool
+                  {isDivsPro ? "Bonding curve · Pons" : `${(market.feeBps / 10_000).toFixed(2)}% pool`}
                 </span>
               </div>
               <div className="text-[11px] text-gray-500">{market.name}</div>
@@ -212,7 +246,9 @@ export default function TokenPage({
           </div>
 
           <div className="text-right">
-            <div className="font-mono text-2xl text-white leading-none">{usd(market.price)}</div>
+            <div className="font-mono text-2xl text-white leading-none">
+              {usd(market.price, market.price > 0 && market.price < 0.01 ? 8 : 2)}
+            </div>
             <div className={`font-mono text-xs mt-1.5 ${up ? "text-[#10B981]" : "text-red-400"}`}>
               {up ? "+" : ""}
               {market.change.toFixed(2)}% {win || "…"}
@@ -243,11 +279,20 @@ export default function TokenPage({
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <Stat label={`Volume ${win || "…"}`} value={compact(market.volume)} />
-        <Stat label="Pool liquidity" value={compact(market.tvl)} />
-        <Stat label={`Fees ${win || "…"}`} value={compact(market.fees)} accent />
+        <Stat label={`Volume ${win || "…"}`} value={compact(isDivsPro ? buyVolume + sellVolume : market.volume)} />
+        <Stat label={isDivsPro ? "ETH in curve" : "Pool liquidity"} value={compact(market.tvl)} />
+        <Stat label={`Fees ${win || "…"}`} value={compact(isDivsPro ? divsProFees : market.fees)} accent />
         <Stat label="Trades" value={num(buys + sells)} />
-        <Stat label="Fee tier" value={`${(market.feeBps / 10_000).toFixed(2)}%`} />
+        <Stat
+          label="Fee tier"
+          value={
+            isDivsPro
+              ? buyVolume + sellVolume > 0
+                ? `~${((divsProFees / (buyVolume + sellVolume)) * 100).toFixed(1)}%`
+                : "—"
+              : `${(market.feeBps / 10_000).toFixed(2)}%`
+          }
+        />
       </div>
 
       <div className="grid lg:grid-cols-[1fr_300px] gap-4 items-start">
@@ -299,8 +344,10 @@ export default function TokenPage({
                     tick={{ fill: "#5A6068", fontSize: 9 }}
                     axisLine={false}
                     tickLine={false}
-                    width={52}
-                    tickFormatter={(v: number) => usd(v, 2)}
+                    width={isDivsPro ? 68 : 52}
+                    // A curve this early prices in fractions of a cent -
+                    // usd(v, 2) would round every tick to the same $0.00.
+                    tickFormatter={(v: number) => usd(v, isDivsPro ? 6 : 2)}
                   />
                   <Tooltip
                     contentStyle={{
@@ -310,7 +357,7 @@ export default function TokenPage({
                       fontSize: 11,
                     }}
                     labelStyle={{ color: "#9A9FA8" }}
-                    formatter={(v) => [usd(Number(v)), "Price"] as [string, string]}
+                    formatter={(v) => [usd(Number(v), isDivsPro ? 8 : 2), "Price"] as [string, string]}
                   />
                   <Area
                     type="monotone"
@@ -329,7 +376,7 @@ export default function TokenPage({
           </div>
         </div>
 
-        <TradePanel market={market} />
+        {isDivsPro ? <ExternalTradePanel /> : <TradePanel market={market} />}
       </div>
 
       {/* order flow */}
@@ -399,7 +446,9 @@ export default function TokenPage({
                       {t.side}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-right font-mono text-gray-300">{usd(t.price)}</td>
+                  <td className="px-3 py-2 text-right font-mono text-gray-300">
+                    {usd(t.price, isDivsPro ? 8 : 2)}
+                  </td>
                   <td className="px-3 py-2 text-right font-mono text-gray-300">{num(t.shares, 4)}</td>
                   <td className="px-3 py-2 text-right font-mono text-white">{usd(t.value)}</td>
                   <td className="px-3 py-2 text-right font-mono text-gray-500">
@@ -427,8 +476,8 @@ export default function TokenPage({
         </div>
       </div>
 
-      {/* what the people who run the company are doing with their own shares */}
-      <TickerInsiderPanel ticker={market.ticker} />
+      {/* DIVSPRO isn't a company with officers to file Form 4s, so no insider panel. */}
+      {!isDivsPro && <TickerInsiderPanel ticker={market.ticker} />}
 
       <Footer />
     </div>

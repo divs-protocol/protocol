@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Search, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
 import { compact, num, usd, useLiveMarkets } from "@/lib/live";
 import { takeFocusedMarket } from "@/lib/marketFocus";
+import { buildDivsProMarket, useDivsProPrice } from "@/lib/divspro";
 import MarketsHero from "./MarketsHero";
 import TokenPage from "./TokenPage";
 import DivsProCard from "./DivsProCard";
@@ -80,11 +81,15 @@ function SortHeader({
 }
 
 export default function MarketsSection() {
-  const { markets, window, loading } = useLiveMarkets();
+  const { markets, ethUsd, window, loading } = useLiveMarkets();
   // A search elsewhere can name a market to open. Read in the initialiser
   // rather than an effect, so the token view is the first thing rendered
   // instead of the index flashing up and being replaced.
   const [selected, setSelected] = useState<string | null>(takeFocusedMarket);
+  // DIVSPRO isn't in the registry - it's not on a pool the router can trade
+  // - so it can't be found by markets.find() below. This builds the same
+  // LiveMarket shape TokenPage expects, from the vault's own live price.
+  const divsProLive = useDivsProPrice(ethUsd);
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("volume");
@@ -124,6 +129,11 @@ export default function MarketsSection() {
     [markets],
   );
 
+  if (selected === "DIVSPRO") {
+    const m = buildDivsProMarket(divsProLive.priceUsd, 0, divsProLive.reserveEth * ethUsd * 2);
+    return <TokenPage market={m} onBack={() => setSelected(null)} />;
+  }
+
   const openMarket = selected ? markets.find((m) => m.ticker === selected) : undefined;
   if (openMarket) return <TokenPage market={openMarket} onBack={() => setSelected(null)} />;
 
@@ -141,7 +151,7 @@ export default function MarketsSection() {
         onSelect={setSelected}
       />
 
-      <DivsProCard />
+      <DivsProCard onOpen={() => setSelected("DIVSPRO")} />
 
       <div className="flex flex-col md:flex-row md:items-center gap-3">
         <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
