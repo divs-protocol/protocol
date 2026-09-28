@@ -3,6 +3,7 @@
     "weth": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
     "usdg": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
     "usdgWethPool": "0x69BfaF19C9f377BB306a89aEd9F6B07e2c1a8d9a",
-    "feeBps": 10
+    "feeBps": 10,
+    "poolManager": "0x8366a39CC670B4001A1121B8F6A443A643e40951"
   }
 }

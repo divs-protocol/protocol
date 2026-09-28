@@ -211,19 +211,18 @@ allow it - not a router change.
 
 ## 7. Deployment status
 
-**`DivsRouter` is deployed and verified** on Robinhood Chain (4663), at
-[`0xd8B82A06892c61a3d36D397d64595607Dc8101e8`](https://robinhoodchain.blockscout.com/address/0xd8B82A06892c61a3d36D397d64595607Dc8101e8).
+**`DivsRouter` is deployed** on Robinhood Chain (4663), at
+[`0x5A17903653676A4B6Cd448aeD5327785BD85B1C7`](https://robinhoodchain.blockscout.com/address/0x5A17903653676A4B6Cd448aeD5327785BD85B1C7).
 It was deployed with no staking address, via
 [`DivsRouterOnly.ts`](contracts/ignition/modules/DivsRouterOnly.ts), so trading
-does not wait on $DIVS. Source is public and matches the deployed bytecode.
+does not wait on $DIVS.
 
-**That deployment routes V3 only.** V2 and V4 support - `buyV2`/`sellV2`,
-`buyV4`/`sellV4`, the hook allowlist - landed in the source after this address
-was deployed, so the live contract predates all three. The capability exists
-in this repository and is covered by the test suite; it is not yet live until
-the router is redeployed with a V4 `poolManager` address and the app points at
-the new one. Nothing about that redeploy is disruptive - see "Replacing the
-router later costs little" in the [README](README.md) - it holds no user
+**V3, V2, and V4 all route through this deployment.** `buyV2`/`sellV2`,
+`buyV4`/`sellV4`, and the hook allowlist are live - the contract was deployed
+with a real `poolManager` address, so V4 markets trade immediately, no further
+redeploy needed. A prior router address routed V3 only; it predates V2/V4
+support and has been superseded by the address above, per "Replacing the
+router later costs little" in the [README](README.md) - it held no user
 balances to migrate.
 
 **`DivsStaking` is not deployed.** $DIVS has not launched yet - it launches
