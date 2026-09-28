@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
-import { Search } from "lucide-react";
+import { Search, Copy, Check, ExternalLink, ArrowUpRight } from "lucide-react";
 import { useAccount } from "wagmi";
 import {
   HISTORY_SPANS,
@@ -11,12 +12,14 @@ import {
   type LiveMarket,
   ago,
   num,
+  shortAddr,
   usd,
   useDepth,
   useLiveMarkets,
   useMarketHistory,
 } from "@/lib/live";
 import { quotePerShare } from "@/lib/exchange";
+import { focusMarket } from "@/lib/marketFocus";
 import {
   DEFAULT_FEE_BPS,
   ROUTER_ADDRESS,
@@ -27,6 +30,8 @@ import { useConnectWallet } from "./wallet";
 import ConnectPrompt from "./ConnectPrompt";
 import Footer from "./Footer";
 import TradeHero from "./TradeHero";
+
+const EXPLORER = "https://robinhoodchain.blockscout.com";
 
 
 /**
@@ -59,6 +64,63 @@ function Panel({
         {right}
       </div>
       {children}
+    </div>
+  );
+}
+
+/**
+ * The order-entry chart names a market by ticker; this names it by contract,
+ * so "is this the right token" is answerable without leaving the trade
+ * ticket. `TokenPage` already shows the fuller picture - transactions,
+ * insider activity - so this links there via `focusMarket` rather than
+ * duplicating it.
+ */
+function ContractBar({ market }: { market: LiveMarket }) {
+  const router = useRouter();
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(market.token);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+
+  const openTokenPage = () => {
+    focusMarket(market.ticker);
+    router.push("/markets");
+  };
+
+  return (
+    <div className="flex items-center gap-2 px-3.5 py-2 border-b border-[#232730] flex-shrink-0">
+      <span className="text-[9px] uppercase tracking-wide text-gray-500 flex-shrink-0">Contract</span>
+      <code className="font-mono text-[10px] text-gray-400 truncate">{shortAddr(market.token)}</code>
+      <button
+        onClick={copy}
+        className="flex items-center gap-1 bg-[#14161B] border border-[#232730] text-gray-400 hover:text-white text-[9px] px-1.5 py-0.5 rounded-md transition flex-shrink-0"
+      >
+        {copied ? <Check size={9} /> : <Copy size={9} />}
+        {copied ? "Copied" : "Copy"}
+      </button>
+      <a
+        href={`${EXPLORER}/address/${market.token}`}
+        target="_blank"
+        rel="noreferrer"
+        className="flex items-center gap-1 bg-[#14161B] border border-[#232730] text-gray-400 hover:text-white text-[9px] px-1.5 py-0.5 rounded-md transition flex-shrink-0"
+      >
+        <ExternalLink size={9} />
+        Explorer
+      </a>
+      <button
+        onClick={openTokenPage}
+        className="ml-auto flex items-center gap-1 text-[9px] text-gray-500 hover:text-[#10B981] transition flex-shrink-0"
+      >
+        Full token page
+        <ArrowUpRight size={10} />
+      </button>
     </div>
   );
 }
@@ -459,6 +521,7 @@ export default function TradeSection() {
             </div>
           }
         >
+          <ContractBar market={market} />
           <div className="flex-1 min-h-0 p-3">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={series} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>

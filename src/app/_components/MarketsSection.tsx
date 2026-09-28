@@ -6,6 +6,7 @@ import { compact, num, usd, useLiveMarkets } from "@/lib/live";
 import { takeFocusedMarket } from "@/lib/marketFocus";
 import MarketsHero from "./MarketsHero";
 import TokenPage from "./TokenPage";
+import DivsProCard from "./DivsProCard";
 import Footer from "./Footer";
 
 /**
@@ -139,6 +140,8 @@ export default function MarketsSection() {
         loading={loading}
         onSelect={setSelected}
       />
+
+      <DivsProCard />
 
       <div className="flex flex-col md:flex-row md:items-center gap-3">
         <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
