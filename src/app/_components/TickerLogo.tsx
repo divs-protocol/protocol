@@ -23,13 +23,7 @@ export default function TickerLogo({ ticker }: { ticker: string }) {
   const [failed, setFailed] = useState(false);
 
   if (ticker === "DIVSPRO") {
-    return (
-      <img
-        src="/logo.png"
-        alt=""
-        className="w-full h-full object-contain rounded-[inherit] bg-white p-1.5"
-      />
-    );
+    return <img src="/logo.png" alt="" className="w-full h-full object-contain p-1" />;
   }
 
   if (failed) return <>{ticker.slice(0, 2)}</>;
@@ -39,7 +33,7 @@ export default function TickerLogo({ ticker }: { ticker: string }) {
       src={`https://images.financialmodelingprep.com/symbol/${ticker}.png`}
       alt=""
       onError={() => setFailed(true)}
-      className="w-full h-full object-contain rounded-[inherit] bg-white p-1"
+      className="w-full h-full object-contain"
     />
   );
 }
