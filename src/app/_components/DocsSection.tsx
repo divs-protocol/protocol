@@ -147,7 +147,7 @@ const TOPICS: Topic[] = [
     label: "Overview",
     eyebrow: "Introduction",
     title: "Overview",
-    lead: "DIVS Protocol is an exchange for tokenized equities on Robinhood Chain. Fees charged on trades are distributed to staked $DIVS rather than retained by the protocol.",
+    lead: "DIVS Protocol is an exchange for tokenized equities on Robinhood Chain. Fees charged on trades are distributed to staked $DIVSPRO rather than retained by the protocol.",
     accent: ACCENTS.emerald,
     body: (a) => (
       <>
@@ -162,12 +162,12 @@ const TOPICS: Topic[] = [
           head={["Asset", "Role", "Staked?"]}
           rows={[
             ["Tokenized stocks (NVDA, AAPL…)", "Traded on the exchange", "No"],
-            ["$DIVS", "Claim on fee revenue", "Yes"],
+            ["$DIVSPRO", "Claim on fee revenue", "Yes"],
             ["DIVS/WETH LP", "Liquidity for the DIVS pair", "Yes"],
           ]}
         />
         <Note accent={a} label="Eligibility">
-          Rewards accrue to staked positions only. An unstaked $DIVS balance carries no weight and
+          Rewards accrue to staked positions only. An unstaked $DIVSPRO balance carries no weight and
           receives no distribution.
         </Note>
       </>
@@ -249,7 +249,7 @@ const TOPICS: Topic[] = [
     label: "Staking",
     eyebrow: "Guide",
     title: "Staking",
-    lead: "Two pools accept deposits. Single-sided $DIVS is pool 0 and the DIVS/WETH LP token is pool 1. Pool ids follow the order in which pools were added.",
+    lead: "Two pools accept deposits. Single-sided $DIVSPRO is pool 0 and the DIVS/WETH LP token is pool 1. Pool ids follow the order in which pools were added.",
     accent: ACCENTS.sky,
     body: (a) => (
       <>
@@ -429,7 +429,7 @@ claim = weight × accWethPerWeight − debt     // entitlement of a position`}</
     label: "Emissions",
     eyebrow: "Mechanism",
     title: "Emissions",
-    lead: "$DIVS distributed in addition to fee revenue, funded from treasury and scheduled over a fixed period.",
+    lead: "$DIVSPRO distributed in addition to fee revenue, funded from treasury and scheduled over a fixed period.",
     accent: ACCENTS.amber,
     body: (a) => (
       <>
@@ -454,7 +454,7 @@ periodFinish = now + duration`}</Pre>
           ]}
         />
         <Note accent={a} label="Reward budget">
-          $DIVS is both staked and emitted, and the contract holds the two separately.{" "}
+          $DIVSPRO is both staked and emitted, and the contract holds the two separately.{" "}
           <C>emissionsFunded</C> tracks the reward budget and <C>totalStakedDivs</C> tracks
           deposits. Only funded DIVS can be scheduled, so an emission cannot be paid out of
           principal.
@@ -550,7 +550,7 @@ EmissionNotified(amount, rate, periodFinish)`}</Pre>
             ],
             [
               "Impermanent loss",
-              "The LP pool carries standard AMM exposure in addition to $DIVS price risk.",
+              "The LP pool carries standard AMM exposure in addition to $DIVSPRO price risk.",
             ],
             [
               "Multipliers are configurable",
@@ -581,7 +581,7 @@ EmissionNotified(amount, rate, periodFinish)`}</Pre>
         {(
           [
             [
-              "Does holding $DIVS earn rewards?",
+              "Does holding $DIVSPRO earn rewards?",
               "No. Rewards accrue to staked positions only. An unstaked balance has zero weight.",
             ],
             [
@@ -723,7 +723,7 @@ export default function DocsSection() {
                 onClick={() => nav("stake")}
                 className="mt-8 w-full bg-[#10B981] hover:bg-[#0EA372] text-black text-[12px] font-bold py-2.5 rounded-xl transition"
               >
-                Stake $DIVS
+                Stake $DIVSPRO
               </button>
             </div>
           </nav>

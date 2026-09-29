@@ -180,7 +180,7 @@ export function PortfolioView() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Holdings value" value={total ? usd(total) : "$0.00"} sub={`${holdings.length} markets`} />
-        <Stat label="DIVS staked" value={num(Number(formatUnits(divsStaked, 18)))} sub="single-sided" />
+        <Stat label="DIVSPRO staked" value={num(Number(formatUnits(divsStaked, 18)))} sub="single-sided" />
         <Stat label="LP staked" value={num(Number(formatUnits(lpStaked, 18)))} sub="DIVS/WETH" />
         <Stat
           label="Claimable fees"

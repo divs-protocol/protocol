@@ -6,6 +6,8 @@ import Footer from "./Footer";
 import { useNav } from "./nav";
 import { MARKETS } from "@/lib/exchange";
 import { DEFAULT_FEE_BPS } from "@/lib/divsRouter";
+import { DIVSPRO_TOKEN } from "@/lib/divspro";
+import { shortAddr } from "@/lib/live";
 
 /**
  * Landing view for the protocol - the "what is this" page, shown when the top
@@ -137,7 +139,7 @@ function BoostCalculator() {
         />
         <span className="flex items-center gap-2 bg-[#1B1E24] border border-[#232730] rounded-full pl-1.5 pr-3 py-1.5 flex-shrink-0">
           <span className="w-5 h-5 rounded-full bg-[#10B981]/20 border border-[#10B981]/40" />
-          <span className="text-[11px] font-semibold text-white">DIVS</span>
+          <span className="text-[11px] font-semibold text-white">DIVSPRO</span>
         </span>
       </div>
 
@@ -222,7 +224,7 @@ function Hero() {
             {/* A definition, not a slogan. Someone arriving here should be able
                 to say what this is after one sentence. */}
             DIVS Protocol is an exchange for tokenized equities on Robinhood Chain. {MARKETS.length}{" "}
-            stocks and funds, open every hour of every day. Stake $DIVS and earn a share of every
+            stocks and funds, open every hour of every day. Stake $DIVSPRO and earn a share of every
             trade.
           </p>
 
@@ -231,7 +233,7 @@ function Hero() {
               onClick={() => nav("stake")}
               className="bg-[#10B981] hover:bg-[#0EA372] text-black font-bold text-xs px-5 py-3 rounded-xl transition shadow-lg shadow-[#10B981]/10"
             >
-              Stake $DIVS
+              Stake $DIVSPRO
             </button>
             <button
               onClick={() => nav("docs")}
@@ -270,7 +272,7 @@ function TwoRoles() {
     <Section className="border-t border-[#1F2228]">
       <Title>What you trade, and what you stake</Title>
       <Lede>
-        These are two different assets. Stock tokens are what you buy and sell. $DIVS is what earns
+        These are two different assets. Stock tokens are what you buy and sell. $DIVSPRO is what earns
         from other people buying and selling. You do not stake the stocks.
       </Lede>
 
@@ -294,13 +296,13 @@ function TwoRoles() {
 
         <div className="bg-[#14161B] border border-[#232730] rounded-2xl p-5">
           <div className="text-[10px] font-mono uppercase tracking-wider text-[#10B981] mb-3">
-            Staked · $DIVS
+            Staked · $DIVSPRO
           </div>
           <h3 className="text-white font-bold text-lg mb-2 tracking-tight">
-            Staked $DIVS
+            Staked $DIVSPRO
           </h3>
           <p className="text-[11px] leading-relaxed text-gray-400 mb-4">
-            Stake $DIVS on its own, or DIVS/WETH LP for more weight. You take a cut of every fee the
+            Stake $DIVSPRO on its own, or DIVS/WETH LP for more weight. You take a cut of every fee the
             exchange charges, paid in WETH, for as long as you stay staked.
           </p>
           <DataRow label="Paid in" value="WETH" />
@@ -310,7 +312,7 @@ function TwoRoles() {
       </div>
 
       <p className="text-[11px] text-gray-500 mt-4">
-        Holding $DIVS in your wallet earns nothing - only staked positions carry weight.
+        Holding $DIVSPRO in your wallet earns nothing - only staked positions carry weight.
       </p>
     </Section>
   );
@@ -328,7 +330,7 @@ function HowItWorks() {
     "Connect a wallet. There is no account to open, no broker and no paperwork.",
     `Buy any of ${MARKETS.length} tokenized stocks and funds with ether or USDG, in one transaction.`,
     `Every trade pays a protocol fee of ${(DEFAULT_FEE_BPS / 100).toFixed(2)}%.`,
-    "That fee is split across staked $DIVS by weight. Lock for longer and your weight rises, up to 4x.",
+    "That fee is split across staked $DIVSPRO by weight. Lock for longer and your weight rises, up to 4x.",
   ];
 
   const parts: [string, string][] = [
@@ -337,8 +339,8 @@ function HowItWorks() {
       `The app at divsprotocol.com. ${MARKETS.length} markets with live prices, charts, depth and the insider filings for each company.`,
     ],
     [
-      "$DIVS",
-      "The token you stake. It launches through a Uniswap V4 launchpad and the protocol neither mints it nor owns it.",
+      "$DIVSPRO",
+      "The token you stake. It trades through a Pons bonding-curve launchpad, and the protocol neither mints it nor owns it.",
     ],
     [
       "DivsRouter",
@@ -346,7 +348,7 @@ function HowItWorks() {
     ],
     [
       "DivsStaking",
-      "The contract that holds staked $DIVS and pays out the fees it receives, by weight.",
+      "The contract that holds staked $DIVSPRO and pays out the fees it receives, by weight.",
     ],
     [
       "Stock tokens",
@@ -474,7 +476,7 @@ function FeeFlow() {
       <Title>Where a fee goes</Title>
       <Lede>
         Every trade pays one. Nothing is held back by a treasury: it is converted to WETH and paid
-        out to staked $DIVS, on-chain, in four steps.
+        out to staked $DIVSPRO, on-chain, in four steps.
       </Lede>
 
       <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 mt-8">
@@ -506,7 +508,7 @@ function Utility() {
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText("");
+      await navigator.clipboard.writeText(DIVSPRO_TOKEN);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -520,19 +522,18 @@ function Utility() {
       <div className="relative">
         <Title>Own the fees</Title>
         <Lede>
-          $DIVS is exposure to every trade on the exchange. Stake it and you take a share of what
+          $DIVSPRO is exposure to every trade on the exchange. Stake it and you take a share of what
           the platform charges, paid in WETH, for as long as you stay staked.
         </Lede>
 
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-[#14161B] border border-[#232730] rounded-2xl px-4 py-3.5 mt-7 mb-6">
           <span className="text-[10px] text-gray-500 whitespace-nowrap">
-            Official $DIVS contract
+            Official $DIVSPRO contract
           </span>
-          <span className="flex-1 font-mono text-[11px] text-gray-600">not yet deployed</span>
+          <span className="flex-1 font-mono text-[11px] text-gray-400">{shortAddr(DIVSPRO_TOKEN)}</span>
           <button
             onClick={copy}
-            disabled
-            className="flex items-center gap-1.5 bg-[#1B1E24] border border-[#232730] text-gray-600 text-[10px] font-semibold px-3 py-1.5 rounded-lg cursor-not-allowed"
+            className="flex items-center gap-1.5 bg-[#1B1E24] border border-[#232730] text-gray-300 hover:text-white hover:border-[#10B981]/40 text-[10px] font-semibold px-3 py-1.5 rounded-lg transition"
           >
             {copied ? <Check size={11} /> : <Copy size={11} />}
             Copy
@@ -542,10 +543,10 @@ function Utility() {
         <div className="border-t border-[#232730]">
           {(
             [
-              ["Fee share", "Every buy and sell on the exchange pays staked $DIVS, in WETH"],
+              ["Fee share", "Every buy and sell on the exchange pays staked $DIVSPRO, in WETH"],
               ["Lock boost", "Lock for 52 weeks and carry 4x the weight of the same stake left flexible"],
               ["LP staking", "Stake DIVS/WETH LP for a higher multiplier, on top of what the pair already earns"],
-              ["Emissions", "Funded $DIVS emissions accrue to stakers alongside the fee share"],
+              ["Emissions", "Funded $DIVSPRO emissions accrue to stakers alongside the fee share"],
               ["Holding alone", "Earns nothing. Only a staked position carries weight"],
             ] as [string, string][]
           ).map(([label, benefit]) => (

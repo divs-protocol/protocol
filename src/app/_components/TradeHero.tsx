@@ -69,7 +69,7 @@ function FeeSplit({ market }: { market: LiveMarket | undefined }) {
         <span className="min-w-0">
           <span className="flex items-center gap-1.5 text-[11px] text-white">
             <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] shrink-0" />
-            Staked $DIVS
+            Staked $DIVSPRO
           </span>
           <span className="block text-[10px] text-gray-500 ml-3">
             The protocol fee, {protocolPct.toFixed(2)}%
@@ -81,7 +81,7 @@ function FeeSplit({ market }: { market: LiveMarket | undefined }) {
       <p className="text-[10px] text-gray-600 leading-relaxed mt-3 pt-3 border-t border-[#232730]">
         {/* The fee is taken on the quote side so the router never holds an
             equity position between transactions. */}
-        Every cent of the protocol fee goes to staked $DIVS. The protocol keeps none of it.
+        Every cent of the protocol fee goes to staked $DIVSPRO. The protocol keeps none of it.
       </p>
     </HeroCard>
   );

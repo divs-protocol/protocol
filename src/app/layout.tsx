@@ -4,7 +4,7 @@ import Providers from "./providers";
 import { SITE_URL } from "@/lib/wagmi";
 
 const description =
-  "Decentralized exchange for tokenized equities on Robinhood Chain. Instant settlement, markets that never close, and every trading fee paid to $DIVS stakers.";
+  "Decentralized exchange for tokenized equities on Robinhood Chain. Instant settlement, markets that never close, and every trading fee paid to $DIVSPRO stakers.";
 
 /**
  * `metadataBase` is what Next resolves relative asset paths against, so without

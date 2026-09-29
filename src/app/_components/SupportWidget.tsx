@@ -23,8 +23,8 @@ const SOCIALS: { label: string; url?: string }[] = [
 
 const QUESTIONS: [string, string][] = [
   [
-    "How do I earn from DIVS?",
-    "Stake $DIVS, or DIVS/WETH LP, and you receive a share of the fee from every trade on the platform, paid in WETH. Holding without staking earns nothing.",
+    "How do I earn from $DIVSPRO?",
+    "Stake $DIVSPRO, or DIVSPRO/WETH LP, and you receive a share of the fee from every trade on the platform, paid in WETH. Holding without staking earns nothing.",
   ],
   [
     "Do I need to stake to trade?",
@@ -133,7 +133,7 @@ export default function SupportWidget({
               {(
                 [
                   ["Read the docs", "docs"],
-                  ["Stake $DIVS", "stake"],
+                  ["Stake $DIVSPRO", "stake"],
                   ["Open the exchange", "exchange"],
                   ["View your portfolio", "portfolio"],
                 ] as const

@@ -38,7 +38,7 @@ import Footer from "./Footer";
  */
 
 const POOLS = [
-  { id: DIVS_POOL, key: "divs", label: "DIVS", note: "Single-sided", token: DIVS_ADDRESS },
+  { id: DIVS_POOL, key: "divs", label: "DIVSPRO", note: "Single-sided", token: DIVS_ADDRESS },
   { id: LP_POOL, key: "lp", label: "DIVS/WETH LP", note: "Higher pool weight", token: LP_ADDRESS },
 ] as const;
 
@@ -325,7 +325,7 @@ export default function StakeSection() {
         <div>
           <h2 className="text-white font-bold tracking-tight text-xl mb-1">Stake</h2>
           <p className="text-[11px] text-gray-500">
-            Stake $DIVS or DIVS/WETH LP and collect a share of every trading fee.
+            Stake $DIVSPRO or DIVS/WETH LP and collect a share of every trading fee.
           </p>
         </div>
         <ConnectPrompt what="Your staking position" />
@@ -339,7 +339,7 @@ export default function StakeSection() {
       <div>
         <h2 className="text-white font-bold tracking-tight text-xl mb-1">Stake</h2>
         <p className="text-[11px] text-gray-500">
-          Stake $DIVS or DIVS/WETH LP and collect a share of every trading fee. Lock longer for more
+          Stake $DIVSPRO or DIVS/WETH LP and collect a share of every trading fee. Lock longer for more
           weight.
         </p>
       </div>
@@ -640,7 +640,7 @@ export default function StakeSection() {
         }
       >
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 p-4">
-          <Tile label="Total staked" value={fmt(totalStaked)} unit="DIVS" />
+          <Tile label="Total staked" value={fmt(totalStaked)} unit="DIVSPRO" />
           <Tile label="Total weight" value={fmt(totalWeight)} unit="what fees divide by" />
           <Tile
             label="Your share"
@@ -690,7 +690,7 @@ export default function StakeSection() {
 
         <div className="border-t border-[#232730]">
           <AddressRow label="Staking contract" value={STAKING_ADDRESS} />
-          <AddressRow label="Staked token" value={DIVS_ADDRESS} />
+          <AddressRow label="Staked token ($DIVSPRO)" value={DIVS_ADDRESS} />
           <AddressRow label="LP token" value={LP_ADDRESS} />
         </div>
       </Panel>

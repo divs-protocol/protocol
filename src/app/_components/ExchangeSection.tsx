@@ -149,7 +149,7 @@ function Hero({
           </h1>
           <p className="text-sm md:text-[15px] leading-relaxed text-gray-400 max-w-lg mb-8">
             Trade tokenized equities around the clock on Robinhood Chain. Every fill pays a fee, and
-            every fee goes to the people staking $DIVS.
+            every fee goes to the people staking $DIVSPRO.
           </p>
 
           <div className="flex flex-wrap items-center gap-3 mb-8">
@@ -449,7 +449,7 @@ function EarnSection({ onNavigate }: { onNavigate: (s: string) => void }) {
             <div className="w-12 h-12 rounded-2xl bg-[#10B981]/10 border border-[#10B981]/25 text-[#10B981] flex items-center justify-center mx-auto mb-4">
               <Coins size={20} />
             </div>
-            <div className="text-[11px] text-gray-400 mb-2">Lock $DIVS for up to a year</div>
+            <div className="text-[11px] text-gray-400 mb-2">Lock $DIVSPRO for up to a year</div>
             <div className="text-gray-400 text-sm mb-1">Up to</div>
             <div className="font-bold text-4xl md:text-5xl text-[#10B981] mb-4">4.00x</div>
             <div className="text-[11px] text-gray-500">weight on the same stake</div>
@@ -464,7 +464,7 @@ function EarnSection({ onNavigate }: { onNavigate: (s: string) => void }) {
 
         <div className="grid grid-rows-2 gap-4">
           {[
-            ["$DIVS single-sided", "Share of every trading fee", "WETH", Layers, "stake"],
+            ["$DIVSPRO single-sided", "Share of every trading fee", "WETH", Layers, "stake"],
             ["DIVS/WETH LP", "Higher pool weight, plus pair fees", "WETH", Droplets, "stake"],
           ].map(([title, sub, unit, Icon, target]) => {
             const I = Icon as typeof Layers;
@@ -500,7 +500,7 @@ function EarnSection({ onNavigate }: { onNavigate: (s: string) => void }) {
 function Products({ onNavigate, onTrade }: { onNavigate: (s: string) => void; onTrade: (t: string) => void }) {
   const items: [string, string, () => void][] = [
     ["Spot", "Swap tokenized equities against WETH, straight from your wallet. No account, no custody.", () => onTrade(MARKETS[0].ticker)],
-    ["Stake", "Lock $DIVS or the LP and collect a share of every fee the platform charges.", () => onNavigate("stake")],
+    ["Stake", "Lock $DIVSPRO or the LP and collect a share of every fee the platform charges.", () => onNavigate("stake")],
     ["Markets", "Every listed market, sortable by price, volume and the fees it pays stakers.", () => onNavigate("markets")],
     ["Analytics", "Where fees come from, where they go, and how stake is distributed across locks.", () => onNavigate("analytics")],
     ["Portfolio", "Your holdings priced live, your staking weight, and what is claimable right now.", () => onNavigate("portfolio")],
@@ -550,7 +550,7 @@ function QA() {
     ],
     [
       "How does DIVS make money?",
-      "A fee on every swap. It is the protocol's only revenue, and it is not retained - it is routed on-chain to whoever is staking $DIVS at the time.",
+      "A fee on every swap. It is the protocol's only revenue, and it is not retained - it is routed on-chain to whoever is staking $DIVSPRO at the time.",
     ],
     [
       "Do I need to stake to trade?",
