@@ -3,37 +3,44 @@
 import { useState } from "react";
 
 /**
- * A market's real company logo, keyed by ticker rather than a hand-built
- * domain map - the markets list runs to 191 tickers, most of which nobody
- * mapped a domain for by hand. financialmodelingprep's symbol image is one of
- * the few public logo services indexed by ticker instead of domain, and
- * covers small caps (e.g. INOD) as well as mega caps, confirmed by direct
- * request before wiring this in. A ticker it doesn't have 404s cleanly, so
- * this falls back to the ticker's first two letters - what every market
- * showed before this.
+ * A market's real company logo, on its own - no colored/bordered chip behind
+ * it. An earlier version wrapped every logo in the same tinted badge used for
+ * the ticker-letter fallback, which washed brand-colored marks out against
+ * each other; real logos should just sit on the dark background like they do
+ * everywhere else on the web. Sized entirely by the `className` passed in
+ * (e.g. "w-9 h-9 rounded-xl"), since there's no parent container doing that
+ * job anymore.
  *
- * $DIVSPRO isn't a public company, so it was never going to be in that
- * service - it gets our own mark instead, the same /logo.png used in the nav.
- *
- * Meant to sit inside an existing sized, rounded badge; fills it with
- * `w-full h-full`, so the parent needs `overflow-hidden` to keep the image
- * inside its corners.
+ * $DIVSPRO isn't a public company, so it gets our own mark (/logo.png, same
+ * as the nav) instead of the ticker-keyed lookup used for everything else.
+ * A ticker with no logo (real or 404, from financialmodelingprep's
+ * ticker-keyed image service - covers small caps like INOD, not just mega
+ * caps) falls back to a small lettered chip: the one spot a background box
+ * still earns its keep, since bare text with no shape is hard to read.
  */
-export default function TickerLogo({ ticker }: { ticker: string }) {
+export default function TickerLogo({ ticker, className = "" }: { ticker: string; className?: string }) {
   const [failed, setFailed] = useState(false);
 
   if (ticker === "DIVSPRO") {
-    return <img src="/logo.png" alt="" className="w-full h-full object-contain p-1" />;
+    return <img src="/logo.png" alt="" className={`object-contain ${className}`} />;
   }
 
-  if (failed) return <>{ticker.slice(0, 2)}</>;
+  if (failed) {
+    return (
+      <span
+        className={`bg-[#10B981]/10 border border-[#10B981]/25 text-[#10B981] flex items-center justify-center text-[9px] font-bold ${className}`}
+      >
+        {ticker.slice(0, 2)}
+      </span>
+    );
+  }
 
   return (
     <img
       src={`https://images.financialmodelingprep.com/symbol/${ticker}.png`}
       alt=""
       onError={() => setFailed(true)}
-      className="w-full h-full object-contain"
+      className={`object-contain ${className}`}
     />
   );
 }

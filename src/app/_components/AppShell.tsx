@@ -23,7 +23,6 @@ import {
   SLIPPAGE_OPTIONS,
   useRouterTrade,
 } from "@/lib/divsRouter";
-import { tickerColor } from "./ExchangeSection";
 import TradeSection from "./TradeSection";
 import AnalyticsSection from "./AnalyticsSection";
 import ExchangeSection from "./ExchangeSection";
@@ -594,7 +593,6 @@ export default function AppShell({ section }: { section: string }) {
                 <div className="flex space-x-2.5 overflow-x-auto pb-1 scrollbar-none">
                   {strip.map((m) => {
                     const up = m.change >= 0;
-                    const c = tickerColor(m.ticker);
                     return (
                       <div
                         key={m.ticker}
@@ -603,12 +601,7 @@ export default function AppShell({ section }: { section: string }) {
                           ticker === m.ticker ? "border-[#10B981] bg-[#1F232C]" : "border-[#232730] hover:border-gray-700"
                         }`}
                       >
-                        <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0 overflow-hidden"
-                          style={{ background: c.bg, border: `1px solid ${c.border}`, color: c.fg }}
-                        >
-                          <TickerLogo ticker={m.ticker} />
-                        </div>
+                        <TickerLogo ticker={m.ticker} className="w-8 h-8 rounded-lg flex-shrink-0" />
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-center">
                             <span className="text-white font-bold text-xs">{m.ticker}</span>
@@ -633,16 +626,7 @@ export default function AppShell({ section }: { section: string }) {
                         phone; side by side at 375px they wrap into each other. */}
                     <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
                       <div className="flex items-center space-x-3">
-                        <div
-                          className="w-9 h-9 rounded-xl flex items-center justify-center text-[11px] font-bold overflow-hidden"
-                          style={{
-                            background: tickerColor(selected?.ticker ?? "").bg,
-                            border: `1px solid ${tickerColor(selected?.ticker ?? "").border}`,
-                            color: tickerColor(selected?.ticker ?? "").fg,
-                          }}
-                        >
-                          <TickerLogo ticker={selected?.ticker ?? ""} />
-                        </div>
+                        <TickerLogo ticker={selected?.ticker ?? ""} className="w-9 h-9 rounded-xl" />
                         <div>
                           <div className="flex items-center space-x-2">
                             <h2 className="text-white font-bold text-sm">{selected?.name}</h2>
@@ -731,15 +715,7 @@ export default function AppShell({ section }: { section: string }) {
 
                       <div className="flex items-center justify-between bg-[#14161B] border border-[#232730] p-2 rounded-xl mb-3">
                         <div className="flex items-center space-x-2">
-                          <span
-                            className="w-5 h-5 rounded text-[8px] font-bold flex items-center justify-center overflow-hidden"
-                            style={{
-                              background: tickerColor(selected?.ticker ?? "").bg,
-                              color: tickerColor(selected?.ticker ?? "").fg,
-                            }}
-                          >
-                            <TickerLogo ticker={selected?.ticker ?? ""} />
-                          </span>
+                          <TickerLogo ticker={selected?.ticker ?? ""} className="w-5 h-5 rounded" />
                           <span className="text-white font-bold">{selected?.ticker}</span>
                         </div>
                         <span className="text-[10px] text-gray-400">

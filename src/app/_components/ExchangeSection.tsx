@@ -258,9 +258,7 @@ function Hero({
                   className="w-full flex items-center justify-between text-left group"
                 >
                   <span className="flex items-center gap-2.5 min-w-0">
-                    <span className="w-6 h-6 rounded-full bg-[#10B981]/10 border border-[#10B981]/25 text-[#10B981] flex items-center justify-center text-[8px] font-bold flex-shrink-0 overflow-hidden">
-                      <TickerLogo ticker={p.market.ticker} />
-                    </span>
+                    <TickerLogo ticker={p.market.ticker} className="w-6 h-6 rounded-full flex-shrink-0" />
                     <span className="text-[11px] font-semibold text-white group-hover:text-[#10B981] transition truncate">
                       {p.market.ticker}
                     </span>
@@ -287,18 +285,12 @@ function MarketRow({
   stat?: { change: number; volume: number };
   onTrade: (t: string) => void;
 }) {
-  const c = tickerColor(p.market.ticker);
   const up = (stat?.change ?? 0) >= 0;
 
   return (
     <div className="grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_112px_84px_84px] items-center gap-3 px-2 py-3.5 rounded-xl hover:bg-[#14161B] transition">
       <div className="flex items-center gap-3 min-w-0">
-        <span
-          className="w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 border overflow-hidden"
-          style={{ background: c.bg, color: c.fg, borderColor: c.border }}
-        >
-          <TickerLogo ticker={p.market.ticker} />
-        </span>
+        <TickerLogo ticker={p.market.ticker} className="w-9 h-9 rounded-full flex-shrink-0" />
         <span className="min-w-0 flex items-baseline gap-2">
           <span className="text-[14px] font-semibold text-white truncate">{p.market.name}</span>
           <span className="text-[11px] text-gray-500 font-mono flex-shrink-0">{p.market.ticker}</span>

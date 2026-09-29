@@ -39,9 +39,7 @@ export default function DivsProCard({ onOpen }: { onOpen?: () => void }) {
       }`}
     >
       <div className="flex items-center gap-3 min-w-0">
-        <span className="w-11 h-11 rounded-xl bg-[#10B981]/10 border border-[#10B981]/25 text-[#10B981] flex items-center justify-center text-xs font-bold flex-shrink-0 overflow-hidden">
-          <TickerLogo ticker="DIVSPRO" />
-        </span>
+        <TickerLogo ticker="DIVSPRO" className="w-11 h-11 rounded-xl flex-shrink-0" />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h3 className="text-white font-bold text-sm">DIVSPRO</h3>

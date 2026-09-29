@@ -363,9 +363,7 @@ export default function ExchangeTerminal({ initialTicker, onBack }: { initialTic
 
       <div className="bg-[#1B1E24] border border-[#232730] rounded-2xl px-4 py-3 flex flex-wrap items-center gap-x-8 gap-y-3">
         <div className="flex items-center gap-3">
-          <span className="w-9 h-9 rounded-xl bg-[#10B981]/10 border border-[#10B981]/25 text-[#10B981] flex items-center justify-center text-[10px] font-bold overflow-hidden">
-            <TickerLogo ticker={active.market.ticker} />
-          </span>
+          <TickerLogo ticker={active.market.ticker} className="w-9 h-9 rounded-xl" />
           <div>
             <div className="text-white font-bold text-sm tracking-tight leading-none">
               {active.market.ticker}
