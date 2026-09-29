@@ -32,6 +32,7 @@ import { PortfolioView, ActivityView, AccountView, SettingsView } from "./Sideba
 import SupportWidget from "./SupportWidget";
 import { useConnectWallet, useWalletStatus } from "./wallet";
 import Footer from "./Footer";
+import TickerLogo from "./TickerLogo";
 import { NavContext } from "./nav";
 
 
@@ -603,10 +604,10 @@ export default function AppShell({ section }: { section: string }) {
                         }`}
                       >
                         <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold flex-shrink-0 overflow-hidden"
                           style={{ background: c.bg, border: `1px solid ${c.border}`, color: c.fg }}
                         >
-                          {m.ticker.slice(0, 2)}
+                          <TickerLogo ticker={m.ticker} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-center">
@@ -633,14 +634,14 @@ export default function AppShell({ section }: { section: string }) {
                     <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
                       <div className="flex items-center space-x-3">
                         <div
-                          className="w-9 h-9 rounded-xl flex items-center justify-center text-[11px] font-bold"
+                          className="w-9 h-9 rounded-xl flex items-center justify-center text-[11px] font-bold overflow-hidden"
                           style={{
                             background: tickerColor(selected?.ticker ?? "").bg,
                             border: `1px solid ${tickerColor(selected?.ticker ?? "").border}`,
                             color: tickerColor(selected?.ticker ?? "").fg,
                           }}
                         >
-                          {(selected?.ticker ?? "").slice(0, 2)}
+                          <TickerLogo ticker={selected?.ticker ?? ""} />
                         </div>
                         <div>
                           <div className="flex items-center space-x-2">
@@ -731,13 +732,13 @@ export default function AppShell({ section }: { section: string }) {
                       <div className="flex items-center justify-between bg-[#14161B] border border-[#232730] p-2 rounded-xl mb-3">
                         <div className="flex items-center space-x-2">
                           <span
-                            className="w-5 h-5 rounded text-[8px] font-bold flex items-center justify-center"
+                            className="w-5 h-5 rounded text-[8px] font-bold flex items-center justify-center overflow-hidden"
                             style={{
                               background: tickerColor(selected?.ticker ?? "").bg,
                               color: tickerColor(selected?.ticker ?? "").fg,
                             }}
                           >
-                            {(selected?.ticker ?? "").slice(0, 2)}
+                            <TickerLogo ticker={selected?.ticker ?? ""} />
                           </span>
                           <span className="text-white font-bold">{selected?.ticker}</span>
                         </div>

@@ -16,6 +16,7 @@ import {
 } from "@/lib/live";
 import { DIVSPRO_TRADE_URL, useDivsProHistory } from "@/lib/divspro";
 import Footer from "./Footer";
+import TickerLogo from "./TickerLogo";
 import { TickerInsiderPanel } from "./InsiderPanel";
 
 /**
@@ -231,8 +232,8 @@ export default function TokenPage({
       <div className="bg-[#1B1E24] border border-[#232730] rounded-2xl p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-3">
-            <span className="w-11 h-11 rounded-xl bg-[#10B981]/10 border border-[#10B981]/25 text-[#10B981] flex items-center justify-center text-xs font-bold flex-shrink-0">
-              {market.ticker.slice(0, 2)}
+            <span className="w-11 h-11 rounded-xl bg-[#10B981]/10 border border-[#10B981]/25 text-[#10B981] flex items-center justify-center text-xs font-bold flex-shrink-0 overflow-hidden">
+              <TickerLogo ticker={market.ticker} />
             </span>
             <div>
               <div className="flex items-center gap-2">

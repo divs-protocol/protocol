@@ -8,6 +8,7 @@ import { buildDivsProMarket, useDivsProPrice } from "@/lib/divspro";
 import MarketsHero from "./MarketsHero";
 import TokenPage from "./TokenPage";
 import DivsProCard from "./DivsProCard";
+import TickerLogo from "./TickerLogo";
 import Footer from "./Footer";
 
 /**
@@ -211,8 +212,8 @@ export default function MarketsSection() {
                     <td className="px-3 py-3 text-gray-600 font-mono">{i + 1}</td>
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-2.5">
-                        <span className="w-7 h-7 rounded-lg bg-[#10B981]/10 border border-[#10B981]/25 text-[#10B981] flex items-center justify-center text-[9px] font-bold flex-shrink-0">
-                          {m.ticker.slice(0, 2)}
+                        <span className="w-7 h-7 rounded-lg bg-[#10B981]/10 border border-[#10B981]/25 text-[#10B981] flex items-center justify-center text-[9px] font-bold flex-shrink-0 overflow-hidden">
+                          <TickerLogo ticker={m.ticker} />
                         </span>
                         <div className="min-w-0">
                           <div className="text-white font-semibold">{m.ticker}</div>

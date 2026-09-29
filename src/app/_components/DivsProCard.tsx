@@ -4,6 +4,7 @@ import { ExternalLink, Copy, Check } from "lucide-react";
 import { useState } from "react";
 import { useLiveMarkets, usd, shortAddr } from "@/lib/live";
 import { DIVSPRO_TOKEN, DIVSPRO_TRADE_URL, useDivsProPrice } from "@/lib/divspro";
+import TickerLogo from "./TickerLogo";
 
 const EXPLORER = "https://robinhoodchain.blockscout.com";
 
@@ -38,8 +39,8 @@ export default function DivsProCard({ onOpen }: { onOpen?: () => void }) {
       }`}
     >
       <div className="flex items-center gap-3 min-w-0">
-        <span className="w-11 h-11 rounded-xl bg-[#10B981]/10 border border-[#10B981]/25 text-[#10B981] flex items-center justify-center text-xs font-bold flex-shrink-0">
-          DP
+        <span className="w-11 h-11 rounded-xl bg-[#10B981]/10 border border-[#10B981]/25 text-[#10B981] flex items-center justify-center text-xs font-bold flex-shrink-0 overflow-hidden">
+          <TickerLogo ticker="DIVSPRO" />
         </span>
         <div className="min-w-0">
           <div className="flex items-center gap-2">

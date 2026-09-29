@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 import { useConnectWallet, useWalletStatus } from "./wallet";
+import TickerLogo from "./TickerLogo";
 import {
   ArrowRight,
   Plus,
@@ -257,8 +258,8 @@ function Hero({
                   className="w-full flex items-center justify-between text-left group"
                 >
                   <span className="flex items-center gap-2.5 min-w-0">
-                    <span className="w-6 h-6 rounded-full bg-[#10B981]/10 border border-[#10B981]/25 text-[#10B981] flex items-center justify-center text-[8px] font-bold flex-shrink-0">
-                      {p.market.ticker.slice(0, 2)}
+                    <span className="w-6 h-6 rounded-full bg-[#10B981]/10 border border-[#10B981]/25 text-[#10B981] flex items-center justify-center text-[8px] font-bold flex-shrink-0 overflow-hidden">
+                      <TickerLogo ticker={p.market.ticker} />
                     </span>
                     <span className="text-[11px] font-semibold text-white group-hover:text-[#10B981] transition truncate">
                       {p.market.ticker}
@@ -293,10 +294,10 @@ function MarketRow({
     <div className="grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_112px_84px_84px] items-center gap-3 px-2 py-3.5 rounded-xl hover:bg-[#14161B] transition">
       <div className="flex items-center gap-3 min-w-0">
         <span
-          className="w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 border"
+          className="w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 border overflow-hidden"
           style={{ background: c.bg, color: c.fg, borderColor: c.border }}
         >
-          {p.market.ticker.slice(0, 2)}
+          <TickerLogo ticker={p.market.ticker} />
         </span>
         <span className="min-w-0 flex items-baseline gap-2">
           <span className="text-[14px] font-semibold text-white truncate">{p.market.name}</span>
