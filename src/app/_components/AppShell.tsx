@@ -16,6 +16,8 @@ import LandingSection from "./LandingSection";
 import AlertsBell from "./AlertsBell";
 import MarketsSection from "./MarketsSection";
 import { compact, num, usd, useDepth, useLiveMarkets, useMarketHistory } from "@/lib/live";
+import { useDivsProPrice } from "@/lib/divspro";
+import { focusMarket } from "@/lib/marketFocus";
 import { quotePerShare } from "@/lib/exchange";
 import {
   DEFAULT_FEE_BPS,
@@ -315,6 +317,7 @@ export default function AppShell({ section }: { section: string }) {
    * stock, and eight identical order-book rows.
    */
   const { markets, ethUsd, window: win, loading: marketsLoading } = useLiveMarkets();
+  const divsProLive = useDivsProPrice(ethUsd);
   const [ticker, setTicker] = useState("NVDA");
   /**
    * Every trade here is a swap against a pool, so there is no order book to
@@ -618,6 +621,40 @@ export default function AppShell({ section }: { section: string }) {
                       </div>
                     );
                   })}
+
+                  {/* Not part of `strip` - DIVSPRO isn't in the volume-ranked
+                      registry (it trades on a Pons bonding curve, not a pool
+                      this router can rank), so it's appended here rather than
+                      competing for a slot by volume. Opens the real token
+                      page instead of setting `ticker`, since this view's
+                      order book and buy/sell panel only work for markets the
+                      router can trade. */}
+                  {(() => {
+                    const price = divsProLive.priceUsd;
+                    return (
+                      <div
+                        onClick={() => {
+                          focusMarket("DIVSPRO");
+                          router.push("/markets");
+                        }}
+                        className="flex items-center space-x-3 bg-[#1B1E24] border border-[#232730] hover:border-gray-700 px-3 py-2 rounded-xl min-w-[170px] cursor-pointer transition"
+                      >
+                        <TickerLogo ticker="DIVSPRO" className="w-8 h-8 rounded-lg flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-center">
+                            <span className="text-white font-bold text-xs">DIVSPRO</span>
+                            <span className="text-gray-300 text-[11px] font-medium">
+                              {divsProLive.loading ? "···" : price ? usd(price, price < 0.01 ? 8 : 2) : "—"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center mt-0.5">
+                            <span className="text-[9px] text-gray-500 truncate">DIVS Protocol&apos;s token</span>
+                            <span className="text-[9px] font-semibold text-gray-500">Pons</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
